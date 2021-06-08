@@ -53,6 +53,7 @@ __all__ = (
     'ExpireBehaviour',
     'ExpireBehavior',
     'StickerType',
+    'NSFWLevel',
 )
 
 def _create_value_cls(name):
@@ -456,6 +457,12 @@ class StickerType(Enum):
     png = 1
     apng = 2
     lottie = 3
+
+class NSFWLevel(Enum):
+    default = 0
+    explicit = 1
+    safe = 2
+    age_restricted = 3
 
 def try_enum(cls, val):
     """A function that tries to turn the value into enum ``cls``.

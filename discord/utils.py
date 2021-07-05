@@ -40,6 +40,14 @@ import warnings
 
 from .errors import InvalidArgument
 
+try:
+    import orjson
+except ModuleNotFoundError:
+    HAS_ORJSON = False
+else:
+    HAS_ORJSON = True
+
+
 DISCORD_EPOCH = 1420070400000
 MAX_ASYNCIO_SECONDS = 3456000
 
@@ -324,8 +332,20 @@ def _bytes_to_base64_data(data):
     b64 = b64encode(data).decode('ascii')
     return fmt.format(mime=mime, data=b64)
 
-def to_json(obj):
-    return json.dumps(obj, separators=(',', ':'), ensure_ascii=True)
+
+if HAS_ORJSON:
+
+    def to_json(obj: Any) -> str:  # type: ignore
+        return orjson.dumps(obj).decode('utf-8')
+
+    from_json = orjson.loads  # type: ignore
+
+else:
+
+    def to_json(obj: Any) -> str:
+        return json.dumps(obj, separators=(',', ':'), ensure_ascii=True)
+
+    from_json = json.loads
 
 def _parse_ratelimit_header(request, *, use_clock=False):
     reset_after = request.headers.get('X-Ratelimit-Reset-After')

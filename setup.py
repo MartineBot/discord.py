@@ -39,6 +39,9 @@ extras_require = {
         'sphinx==3.0.3',
         'sphinxcontrib_trio==1.1.2',
         'sphinxcontrib-websupport',
+    ],
+    'speed': [
+        'orjson>=3.5.4',
     ]
 }
 

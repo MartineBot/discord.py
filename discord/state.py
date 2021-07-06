@@ -30,6 +30,7 @@ import copy
 import datetime
 import itertools
 import logging
+from typing import Dict, Optional
 import weakref
 import warnings
 import inspect
@@ -186,6 +187,7 @@ class ConnectionState:
 
         if not intents.members or cache_flags._empty:
             self.store_user = self.store_user_no_intents
+            self.deref_user = self.deref_user_no_intents
 
         self.parsers = parsers = {}
         for attr, func in inspect.getmembers(self):
@@ -196,7 +198,19 @@ class ConnectionState:
 
     def clear(self):
         self.user = None
-        self._users = weakref.WeakValueDictionary()
+        # Originally, this code used WeakValueDictionary to maintain references to the
+        # global user mapping.
+
+        # However, profiling showed that this came with two cons:
+
+        # 1. The __weakref__ slot caused a non-trivial increase in memory
+        # 2. The performance of the mapping caused store_user to be a bottleneck.
+
+        # Since this is undesirable, a mapping is now used instead with stored
+        # references now using a regular dictionary with eviction being done
+        # using __del__. Testing this for memory leaks led to no discernable leaks,
+        # though more testing will have to be done.
+        self._users: Dict[int, User] = {}
         self._emojis = {}
         self._calls = {}
         self._guilds = {}
@@ -270,7 +284,6 @@ class ConnectionState:
             vc.main_ws = ws
 
     def store_user(self, data):
-        # this way is 300% faster than `dict.setdefault`.
         user_id = int(data['id'])
         try:
             return self._users[user_id]
@@ -278,10 +291,17 @@ class ConnectionState:
             user = User(state=self, data=data)
             if user.discriminator != '0000':
                 self._users[user_id] = user
+                user._stored = True
             return user
+
+    def deref_user(self, user_id):
+        self._users.pop(user_id, None)
 
     def store_user_no_intents(self, data):
         return User(state=self, data=data)
+
+    def deref_user_no_intents(self, user_id):
+        return
 
     def get_user(self, id):
         return self._users.get(id)
@@ -462,7 +482,7 @@ class ConnectionState:
         self._ready_state = asyncio.Queue()
         self.clear()
         self.user = user = ClientUser(state=self, data=data['user'])
-        self._users[user.id] = user
+        self.store_user(data['user'])
 
         for guild_data in data['guilds']:
             self._add_guild_from_data(guild_data)
@@ -634,6 +654,9 @@ class ConnectionState:
 
     def parse_user_update(self, data):
         self.user._update(data)
+        ref = self._users.get(self.user.id)
+        if ref:
+            ref._update(data)
 
     def parse_invite_create(self, data):
         invite = Invite.from_gateway(state=self, data=data)

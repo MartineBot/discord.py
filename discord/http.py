@@ -1856,7 +1856,7 @@ class HTTPClient:
     def application_info(self) -> Response[appinfo.AppInfo]:
         return self.request(Route('GET', '/oauth2/applications/@me'))
 
-    async def get_gateway(self, *, encoding: str = 'json', zlib: bool = True) -> str:
+    async def get_gateway(self, *, encoding: str = 'json', zlib: bool = False) -> str:
         try:
             data = await self.request(Route('GET', '/gateway'))
         except HTTPException as exc:
@@ -1867,7 +1867,7 @@ class HTTPClient:
             value = '{0}?encoding={1}&v=9'
         return value.format(data['url'], encoding)
 
-    async def get_bot_gateway(self, *, encoding: str = 'json', zlib: bool = True) -> Tuple[int, str]:
+    async def get_bot_gateway(self, *, encoding: str = 'json', zlib: bool = False) -> Tuple[int, str]:
         try:
             data = await self.request(Route('GET', '/gateway/bot'))
         except HTTPException as exc:

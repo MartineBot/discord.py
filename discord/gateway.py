@@ -380,7 +380,7 @@ class DiscordWebSocket:
                     '$referrer': '',
                     '$referring_domain': ''
                 },
-                'compress': True,
+                'compress': False,
                 'large_threshold': 250,
                 'v': 3
             }

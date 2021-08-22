@@ -43,7 +43,7 @@ from .. import utils
 from ..errors import InvalidArgument, HTTPException, Forbidden, NotFound, DiscordServerError
 from ..message import Message
 from ..http import Route
-from ..object import Object
+from ..channel import PartialMessageable
 
 from .async_ import BaseWebhook, handle_message_parameters, _WebhookState
 
@@ -52,7 +52,7 @@ __all__ = (
     'SyncWebhookMessage',
 )
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..file import File
@@ -117,7 +117,7 @@ class WebhookAdapter:
 
         if payload is not None:
             headers['Content-Type'] = 'application/json'
-            to_send = utils.to_json(payload)
+            to_send = utils._to_json(payload)
 
         if auth_token is not None:
             headers['Authorization'] = f'Bot {auth_token}'
@@ -150,7 +150,7 @@ class WebhookAdapter:
                     with session.request(
                         method, url, data=to_send, files=file_data, headers=headers, params=params
                     ) as response:
-                        log.debug(
+                        _log.debug(
                             'Webhook ID %s with %s %s has returned status code %s',
                             webhook_id,
                             method,
@@ -168,7 +168,7 @@ class WebhookAdapter:
                         remaining = response.headers.get('X-Ratelimit-Remaining')
                         if remaining == '0' and response.status_code != 429:
                             delta = utils._parse_ratelimit_header(response)
-                            log.debug(
+                            _log.debug(
                                 'Webhook ID %s has been pre-emptively rate limited, waiting %.2f seconds', webhook_id, delta
                             )
                             lock.delay_by(delta)
@@ -181,7 +181,7 @@ class WebhookAdapter:
                                 raise HTTPException(response, data)
 
                             retry_after: float = data['retry_after']  # type: ignore
-                            log.warning('Webhook ID %s is rate limited. Retrying in %.2f seconds', webhook_id, retry_after)
+                            _log.warning('Webhook ID %s is rate limited. Retrying in %.2f seconds', webhook_id, retry_after)
                             time.sleep(retry_after)
                             continue
 
@@ -372,6 +372,8 @@ class SyncWebhookMessage(Message):
 
     .. versionadded:: 2.0
     """
+
+    _state: _WebhookState
 
     def edit(
         self,
@@ -745,8 +747,10 @@ class SyncWebhook(BaseWebhook):
 
     def _create_message(self, data):
         state = _WebhookState(self, parent=self._state)
-        channel = self.channel or Object(id=int(data['channel_id']))
-        return SyncWebhookMessage(data=data, state=state, channel=channel)
+        # state may be artificial (unlikely at this point...)
+        channel = self.channel or PartialMessageable(state=self._state, id=int(data['channel_id']))  # type: ignore
+        # state is artificial
+        return SyncWebhookMessage(data=data, state=state, channel=channel)  # type: ignore
 
     @overload
     def send(

@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from .guild import Guild
     from .types.activity import PartialPresenceUpdate
     from .types.member import (
-        GatewayMember as GatewayMemberPayload,
+        MemberWithUser as MemberWithUserPayload,
         Member as MemberPayload,
         UserWithMember as UserWithMemberPayload,
     )
@@ -275,7 +275,7 @@ class Member(discord.abc.Messageable, _UserTag):
         system: bool
         created_at: datetime.datetime
         default_avatar: Asset
-        avatar: Asset
+        avatar: Optional[Asset]
         dm_channel: Optional[DMChannel]
         create_dm = User.create_dm
         mutual_guilds: List[Guild]
@@ -284,7 +284,7 @@ class Member(discord.abc.Messageable, _UserTag):
         accent_color: Optional[Colour]
         accent_colour: Optional[Colour]
 
-    def __init__(self, *, data: GatewayMemberPayload, guild: Guild, state: ConnectionState):
+    def __init__(self, *, data: MemberWithUserPayload, guild: Guild, state: ConnectionState):
         self._state: ConnectionState = state
         self._user: User = state.store_user(data['user'])
         self.guild: Guild = guild
@@ -513,7 +513,7 @@ class Member(discord.abc.Messageable, _UserTag):
 
         .. versionadded:: 2.0
         """
-        return self.guild_avatar or self.avatar
+        return self.guild_avatar or self._user.avatar or self._user.default_avatar
 
     @property
     def guild_avatar(self) -> Optional[Asset]:
@@ -644,7 +644,7 @@ class Member(discord.abc.Messageable, _UserTag):
         roles: List[discord.abc.Snowflake] = MISSING,
         voice_channel: Optional[VocalGuildChannel] = MISSING,
         reason: Optional[str] = None,
-    ) -> None:
+    ) -> Optional[Member]:
         """|coro|
 
         Edits the member's data.
@@ -669,6 +669,9 @@ class Member(discord.abc.Messageable, _UserTag):
 
         .. versionchanged:: 1.1
             Can now pass ``None`` to ``voice_channel`` to kick a member from voice.
+
+        .. versionchanged:: 2.0
+            The newly member is now optionally returned, if applicable.
 
         Parameters
         -----------
@@ -697,6 +700,12 @@ class Member(discord.abc.Messageable, _UserTag):
             You do not have the proper permissions to the action requested.
         HTTPException
             The operation failed.
+
+        Returns
+        --------
+        Optional[:class:`.Member`]
+            The newly updated member, if applicable. This is only returned
+            when certain fields are updated.
         """
         http = self._state.http
         guild_id = self.guild.id
@@ -739,7 +748,8 @@ class Member(discord.abc.Messageable, _UserTag):
             payload['roles'] = tuple(r.id for r in roles)
 
         if payload:
-            await http.edit_member(guild_id, self.id, reason=reason, **payload)
+            data = await http.edit_member(guild_id, self.id, reason=reason, **payload)
+            return Member(data=data, guild=self.guild, state=self._state)
 
     async def request_to_speak(self) -> None:
         """|coro|
@@ -880,7 +890,7 @@ class Member(discord.abc.Messageable, _UserTag):
             for role in roles:
                 await req(guild_id, user_id, role.id, reason=reason)
 
-    def get_role(self, role_id: int) -> Optional[Role]:
+    def get_role(self, role_id: int, /) -> Optional[Role]:
         """Returns a role with the given ID from roles which the member has.
 
         .. versionadded:: 2.0

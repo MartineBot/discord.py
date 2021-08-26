@@ -147,21 +147,30 @@ class BaseUser(_UserTag):
         return PublicUserFlags._from_value(self._public_flags)
 
     @property
-    def avatar(self) -> Asset:
-        """:class:`Asset`: Returns an :class:`Asset` for the avatar the user has.
+    def avatar(self) -> Optional[Asset]:
+        """Optional[:class:`Asset`]: Returns an :class:`Asset` for the avatar the user has.
 
-        If the user does not have a traditional avatar, an asset for
-        the default avatar is returned instead.
+        If the user does not have a traditional avatar, ``None`` is returned.
+        If you want the avatar that a user has displayed, consider :attr:`display_avatar`.
         """
-        if self._avatar is None:
-            return Asset._from_default_avatar(self._state, int(self.discriminator) % len(DefaultAvatar))
-        else:
+        if self._avatar is not None:
             return Asset._from_avatar(self._state, self.id, self._avatar)
+        return None
 
     @property
     def default_avatar(self) -> Asset:
         """:class:`Asset`: Returns the default avatar for a given user. This is calculated by the user's discriminator."""
         return Asset._from_default_avatar(self._state, int(self.discriminator) % len(DefaultAvatar))
+
+    @property
+    def display_avatar(self) -> Asset:
+        """:class:`Asset`: Returns the user's display avatar.
+
+        For regular users this is just their default avatar or uploaded avatar.
+
+        .. versionadded:: 2.0
+        """
+        return self.avatar or self.default_avatar
 
     @property
     def banner(self) -> Optional[Asset]:
@@ -247,18 +256,6 @@ class BaseUser(_UserTag):
         is returned instead.
         """
         return self.name
-
-    @property
-    def display_avatar(self) -> Asset:
-        """:class:`Asset`: Returns the user's display avatar.
-
-        For regular users this is just their avatar, but
-        if they have a guild specific avatar then that
-        is returned instead.
-
-        .. versionadded:: 2.0
-        """
-        return self.avatar
 
     def mentioned_in(self, message: Message) -> bool:
         """Checks if the user is mentioned in the specified message.
@@ -349,7 +346,7 @@ class ClientUser(BaseUser):
         self._flags = data.get('flags', 0)
         self.mfa_enabled = data.get('mfa_enabled', False)
 
-    async def edit(self, *, username: str = MISSING, avatar: bytes = MISSING) -> None:
+    async def edit(self, *, username: str = MISSING, avatar: bytes = MISSING) -> ClientUser:
         """|coro|
 
         Edits the current profile of the client.
@@ -362,6 +359,9 @@ class ClientUser(BaseUser):
             the :term:`py:bytes-like object` is given through the use of ``fp.read()``.
 
             The only image formats supported for uploading is JPEG and PNG.
+
+        .. versionchanged:: 2.0
+            The edit is no longer in-place, instead the newly edited client user is returned.
 
         Parameters
         -----------
@@ -377,6 +377,11 @@ class ClientUser(BaseUser):
             Editing your profile failed.
         InvalidArgument
             Wrong image format passed for ``avatar``.
+
+        Returns
+        ---------
+        :class:`ClientUser`
+            The newly edited client user.
         """
         payload: Dict[str, Any] = {}
         if username is not MISSING:
@@ -386,7 +391,7 @@ class ClientUser(BaseUser):
             payload['avatar'] = _bytes_to_base64_data(avatar)
 
         data: UserPayload = await self._state.http.edit_profile(payload)
-        self._update(data)
+        return ClientUser(state=self._state, data=data)
 
 
 class User(BaseUser, discord.abc.Messageable):

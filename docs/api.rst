@@ -1934,7 +1934,7 @@ of :class:`enum.Enum`.
     .. attribute:: member_role_update
 
         A member's role has been updated. This triggers when a member
-        either gains a role or losses a role.
+        either gains a role or loses a role.
 
         When this is the action, the type of :attr:`~AuditLogEntry.target` is
         the :class:`Member` or :class:`User` who got the role.
@@ -3931,7 +3931,7 @@ most of these yourself, even if they can also be used to hold attributes.
 Nearly all classes here have :ref:`py:slots` defined which means that it is
 impossible to have dynamic attributes to the data classes.
 
-The only exception to this rule is :class:`abc.Snowflake`, which is made with
+The only exception to this rule is :class:`Object`, which is made with
 dynamic attributes in mind.
 
 

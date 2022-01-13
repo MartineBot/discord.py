@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from .message import AllowedMentions, Message
 
 
-ApplicationCommandType = Literal[1, 2, 3]
+ApplicationCommandType = Literal[1, 2, 3, 4]
 
 class _ApplicationCommandOptional(TypedDict, total=False):
     options: List[ApplicationCommandOption]
@@ -204,7 +204,7 @@ class InteractionApplicationCommandCallbackData(TypedDict, total=False):
     components: List[Component]
 
 
-InteractionResponseType = Literal[1, 4, 5, 6, 7]
+InteractionResponseType = Literal[1, 4, 5, 6, 7, 8]
 
 
 class _InteractionResponseOptional(TypedDict, total=False):

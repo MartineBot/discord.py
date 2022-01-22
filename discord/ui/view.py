@@ -377,6 +377,11 @@ class View:
             return
 
         self.__stopped.set_result(True)
+
+        if self.__cancel_callback:
+            self.__cancel_callback(self)
+            self.__cancel_callback = None
+
         asyncio.create_task(self.on_timeout(), name=f'discord-ui-view-timeout-{self.id}')
 
     def _dispatch_item(self, item: Item, interaction: Interaction):

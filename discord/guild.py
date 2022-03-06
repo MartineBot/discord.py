@@ -68,6 +68,7 @@ from .enums import (
     NotificationLevel,
     NSFWLevel,
     MFALevel,
+    Locale,
 )
 from .mixins import Hashable
 from .user import User
@@ -203,6 +204,10 @@ class Guild(Hashable):
         The guild's description.
     verification_level: :class:`VerificationLevel`
         The guild's verification level.
+    vanity_url_code: Optional[:class:`str`]
+        The guild's vanity url code, if any
+
+        .. versionadded:: 2.0
     explicit_content_filter: :class:`ContentFilter`
         The guild's explicit content filter.
     default_notifications: :class:`NotificationLevel`
@@ -243,9 +248,12 @@ class Guild(Hashable):
         The number goes from 0 to 3 inclusive.
     premium_subscription_count: :class:`int`
         The number of "boosts" this guild currently has.
-    preferred_locale: Optional[:class:`str`]
+    preferred_locale: :class:`Locale`
         The preferred locale for the guild. Used when filtering Server Discovery
         results to a specific language.
+
+        .. versionchanged:: 2.0
+            This field is now an enum instead of a :class:`str`.
     nsfw_level: :class:`NSFWLevel`
         The guild's NSFW level.
 
@@ -255,6 +263,22 @@ class Guild(Hashable):
 
         .. versionchanged:: 2.0
             This field is now an enum instead of an :class:`int`.
+
+    approximate_member_count: Optional[:class:`int`]
+        The approximate number of members in the guild. This is ``None`` unless the guild is obtained
+        using :meth:`Client.fetch_guild` with ``with_counts=True``.
+
+        .. versionadded:: 2.0
+    approximate_presence_count: Optional[:class:`int`]
+        The approximate number of members currently active in the guild.
+        Offline members are excluded. This is ``None`` unless the guild is obtained using
+        :meth:`Client.fetch_guild` with ``with_counts=True``.
+
+        .. versionchanged:: 2.0
+    premium_progress_bar_enabled: :class:`bool`
+        Indicates if the guild has premium AKA server boost level progress bar enabled.
+
+        .. versionadded:: 2.0
     """
 
     __slots__ = (
@@ -279,6 +303,7 @@ class Guild(Hashable):
         'preferred_locale',
         'nsfw_level',
         'mfa_level',
+        'vanity_url_code',
         '_members',
         '_channels',
         '_icon',
@@ -297,6 +322,9 @@ class Guild(Hashable):
         '_stage_instances',
         '_scheduled_events',
         '_threads',
+        'approximate_member_count',
+        'approximate_presence_count',
+        'premium_progress_bar_enabled',
     )
 
     _PREMIUM_GUILD_LIMITS: ClassVar[Dict[Optional[int], _GuildLimit]] = {
@@ -456,13 +484,17 @@ class Guild(Hashable):
         self.max_video_channel_users: Optional[int] = guild.get('max_video_channel_users')
         self.premium_tier: int = guild.get('premium_tier', 0)
         self.premium_subscription_count: int = guild.get('premium_subscription_count') or 0
+        self.vanity_url_code: Optional[str] = guild.get('vanity_url_code')
         self._system_channel_flags: int = guild.get('system_channel_flags', 0)
-        self.preferred_locale: Optional[str] = guild.get('preferred_locale')
+        self.preferred_locale: Locale = try_enum(Locale, guild.get('preferred_locale', 'en-US'))
         self._discovery_splash: Optional[str] = guild.get('discovery_splash')
         self._rules_channel_id: Optional[int] = utils._get_as_snowflake(guild, 'rules_channel_id')
         self._public_updates_channel_id: Optional[int] = utils._get_as_snowflake(guild, 'public_updates_channel_id')
         self.nsfw_level: NSFWLevel = try_enum(NSFWLevel, guild.get('nsfw_level', 0))
         self.mfa_level: MFALevel = try_enum(MFALevel, guild.get('mfa_level', 0))
+        self.approximate_presence_count: Optional[int] = guild.get('approximate_presence_count')
+        self.approximate_member_count: Optional[int] = guild.get('approximate_member_count')
+        self.premium_progress_bar_enabled: bool = guild.get('premium_progress_bar_enabled', False)
 
         self._stage_instances: Dict[int, StageInstance] = {}
         for s in guild.get('stage_instances', []):
@@ -1524,9 +1556,10 @@ class Guild(Hashable):
         vanity_code: str = MISSING,
         system_channel: Optional[TextChannel] = MISSING,
         system_channel_flags: SystemChannelFlags = MISSING,
-        preferred_locale: str = MISSING,
+        preferred_locale: Locale = MISSING,
         rules_channel: Optional[TextChannel] = MISSING,
         public_updates_channel: Optional[TextChannel] = MISSING,
+        premium_progress_bar_enabled: bool = MISSING,
     ) -> Guild:
         r"""|coro|
 
@@ -1550,6 +1583,12 @@ class Guild(Hashable):
         .. versionchanged:: 2.0
             This function no-longer raises ``InvalidArgument`` instead raising
             :exc:`ValueError` or :exc:`TypeError` in various cases.
+
+        .. versionchanged:: 2.0
+            The ``preferred_locale`` keyword parameter now accepts an enum instead of :class:`str`.
+
+        .. versionchanged:: 2.0
+            The `premium_progress_bar_enabled` keyword-only parameter were added.
 
         Parameters
         ----------
@@ -1598,9 +1637,8 @@ class Guild(Hashable):
             The new channel that is used for the system channel. Could be ``None`` for no system channel.
         system_channel_flags: :class:`SystemChannelFlags`
             The new system channel settings to use with the new system channel.
-        preferred_locale: :class:`str`
+        preferred_locale: :class:`Locale`
             The new preferred locale for the guild. Used as the primary language in the guild.
-            If set, this must be an ISO 639 code, e.g. ``en-US`` or ``ja`` or ``zh-CN``.
         rules_channel: Optional[:class:`TextChannel`]
             The new channel that is used for rules. This is only available to
             guilds that contain ``PUBLIC`` in :attr:`Guild.features`. Could be ``None`` for no rules
@@ -1609,6 +1647,8 @@ class Guild(Hashable):
             The new channel that is used for public updates from Discord. This is only available to
             guilds that contain ``PUBLIC`` in :attr:`Guild.features`. Could be ``None`` for no
             public updates channel.
+        premium_progress_bar_enabled: :class:`bool`
+            Whether the premium AKA server boost level progress bar should be enabled for the guild.
         reason: Optional[:class:`str`]
             The reason for editing this guild. Shows up on the audit log.
 
@@ -1647,7 +1687,7 @@ class Guild(Hashable):
             fields['description'] = description
 
         if preferred_locale is not MISSING:
-            fields['preferred_locale'] = preferred_locale
+            fields['preferred_locale'] = str(preferred_locale)
 
         if afk_timeout is not MISSING:
             fields['afk_timeout'] = afk_timeout
@@ -1740,6 +1780,9 @@ class Guild(Hashable):
                     )
 
             fields['features'] = features
+
+        if premium_progress_bar_enabled is not MISSING:
+            fields['premium_progress_bar_enabled'] = premium_progress_bar_enabled
 
         data = await http.edit_guild(self.id, reason=reason, **fields)
         return Guild(data=data, state=self._state)
@@ -3344,7 +3387,7 @@ class Guild(Hashable):
         -------
         ClientException
             The members intent is not enabled.
-        
+
         Returns
         --------
         Optional[List[:class:`Member`]]
@@ -3355,8 +3398,7 @@ class Guild(Hashable):
             raise ClientException('Intents.members must be enabled to use this.')
 
         if not self._state.is_guild_evicted(self):
-            await self._state.chunk_guild(self, cache=cache)
-            return
+            return await self._state.chunk_guild(self, cache=cache)
 
     async def query_members(
         self,

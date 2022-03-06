@@ -27,6 +27,7 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple, Union
 import asyncio
+import datetime
 
 from . import utils
 from .enums import try_enum, InteractionType, InteractionResponseType
@@ -221,6 +222,20 @@ class Interaction:
             'token': self.token,
         }
         return Webhook.from_state(data=payload, state=self._state)
+
+    @property
+    def created_at(self) -> datetime.datetime:
+        """:class:`datetime.datetime`: When the interaction was created."""
+        return utils.snowflake_time(self.id)
+
+    @property
+    def expires_at(self) -> datetime.datetime:
+        """:class:`datetime.datetime`: When the interaction expires."""
+        return self.created_at + datetime.timedelta(minutes=15)
+
+    def is_expired(self) -> bool:
+        """:class:`bool`: Returns ``True`` if the interaction is expired."""
+        return utils.utcnow() >= self.expires_at
 
     async def original_message(self) -> InteractionMessage:
         """|coro|
@@ -494,6 +509,7 @@ class InteractionResponse:
         tts: bool = False,
         ephemeral: bool = False,
         allowed_mentions: AllowedMentions = MISSING,
+        suppress_embeds: bool = False,
     ) -> None:
         """|coro|
 
@@ -524,6 +540,10 @@ class InteractionResponse:
         allowed_mentions: :class:`~discord.AllowedMentions`
             Controls the mentions being processed in this message. See :meth:`.abc.Messageable.send` for
             more information.
+        suppress_embeds: :class:`bool`
+            Whether to suppress embeds for the message. This sends the message without any embeds if set to ``True``.
+
+            .. versionadded:: 2.0
 
         Raises
         -------
@@ -539,8 +559,10 @@ class InteractionResponse:
         if self._responded:
             raise InteractionResponded(self._parent)
 
-        if ephemeral:
-            flags = MessageFlags._from_value(64)
+        if ephemeral or suppress_embeds:
+            flags = MessageFlags._from_value(0)
+            flags.ephemeral = ephemeral
+            flags.suppress_embeds = suppress_embeds
         else:
             flags = MISSING
 

@@ -25,6 +25,7 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 from typing import Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
+from datetime import datetime
 import time
 import asyncio
 
@@ -143,6 +144,7 @@ class Thread(Messageable, Hashable):
         'archiver_id',
         'auto_archive_duration',
         'archive_timestamp',
+        '_created_at',
     )
 
     def __init__(self, *, guild: Guild, state: ConnectionState, data: ThreadPayload):
@@ -189,6 +191,7 @@ class Thread(Messageable, Hashable):
         self.archive_timestamp = parse_time(data['archive_timestamp'])
         self.locked = data.get('locked', False)
         self.invitable = data.get('invitable', True)
+        self._created_at = parse_time(data.get('create_timestamp'))
 
     def _update(self, data):
         try:
@@ -273,7 +276,7 @@ class Thread(Messageable, Hashable):
         if parent is None:
             raise ClientException('Parent channel not found')
         return parent.category
-    
+
     @property
     def category_id(self) -> Optional[int]:
         """The category channel ID the parent channel belongs to, if applicable.
@@ -293,6 +296,16 @@ class Thread(Messageable, Hashable):
         if parent is None:
             raise ClientException('Parent channel not found')
         return parent.category_id
+
+    @property
+    def created_at(self) -> Optional[datetime]:
+        """An aware timestamp of when the thread was created in UTC.
+
+        .. note::
+
+            This timestamp only exists for threads created after 9 January 2022, otherwise returns ``None``.
+        """
+        return self._created_at
 
     def is_private(self) -> bool:
         """:class:`bool`: Whether the thread is a private thread.
@@ -351,7 +364,7 @@ class Thread(Messageable, Hashable):
             raise ClientException('Parent channel not found')
         return parent.permissions_for(obj)
 
-    async def delete_messages(self, messages: Iterable[Snowflake]) -> None:
+    async def delete_messages(self, messages: Iterable[Snowflake], /) -> None:
         """|coro|
 
         Deletes a list of messages. This is similar to :meth:`Message.delete`
@@ -618,14 +631,13 @@ class Thread(Messageable, Hashable):
         """
         await self._state.http.leave_thread(self.id)
 
-    async def add_user(self, user: Snowflake):
+    async def add_user(self, user: Snowflake, /):
         """|coro|
 
         Adds a user to this thread.
 
-        You must have :attr:`~Permissions.send_messages` and :attr:`~Permissions.use_threads`
-        to add a user to a public thread. If the thread is private then :attr:`~Permissions.send_messages`
-        and either :attr:`~Permissions.use_private_threads` or :attr:`~Permissions.manage_messages`
+        You must have :attr:`~Permissions.send_messages_in_threads` to add a user to a thread.
+        If the thread is private then and :attr:`invitable` is ``False`` then :attr:`~Permissions.manage_messages`
         is required to add a user to the thread.
 
         Parameters
@@ -642,7 +654,7 @@ class Thread(Messageable, Hashable):
         """
         await self._state.http.add_user_to_thread(self.id, user.id)
 
-    async def remove_user(self, user: Snowflake):
+    async def remove_user(self, user: Snowflake, /):
         """|coro|
 
         Removes a user from this thread.
@@ -662,6 +674,27 @@ class Thread(Messageable, Hashable):
             Removing the user from the thread failed.
         """
         await self._state.http.remove_user_from_thread(self.id, user.id)
+
+    async def fetch_member(self, user_id: int, /) -> ThreadMember:
+        """|coro|
+
+        Retrieves a :class:`ThreadMember` for the given user ID.
+
+        Raises
+        -------
+        NotFound
+            The specified user is not a member of this thread.
+        HTTPException
+            Retrieving the member failed.
+
+        Returns
+        --------
+        :class:`ThreadMember`
+            The thread member from the user ID.
+        """
+
+        data = await self._state.http.get_thread_member(self.id, user_id)
+        return ThreadMember(parent=self, data=data)
 
     async def fetch_members(self) -> List[ThreadMember]:
         """|coro|

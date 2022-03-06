@@ -29,26 +29,42 @@ import datetime
 import re
 import io
 from os import PathLike
-from typing import Dict, TYPE_CHECKING, Union, List, Optional, Any, Callable, Tuple, ClassVar, Optional, overload, TypeVar, Type
+from typing import (
+    Dict,
+    TYPE_CHECKING,
+    Union,
+    List,
+    Optional,
+    Any,
+    Callable,
+    Tuple,
+    ClassVar,
+    Optional,
+    overload,
+)
 
 from . import utils
 from .reaction import Reaction
 from .emoji import Emoji
 from .partial_emoji import PartialEmoji
 from .enums import MessageType, ChannelType, try_enum
-from .errors import InvalidArgument, HTTPException
+from .errors import HTTPException
 from .components import _component_factory
 from .embeds import Embed
 from .member import Member
 from .flags import MessageFlags
 from .file import File
 from .utils import escape_mentions, MISSING
+from .http import handle_message_parameters
 from .guild import Guild
 from .mixins import Hashable
 from .sticker import StickerItem
 from .threads import Thread
+from .channel import PartialMessageable
 
 if TYPE_CHECKING:
+    from typing_extensions import Self
+
     from .types.message import (
         Message as MessagePayload,
         Attachment as AttachmentPayload,
@@ -66,17 +82,17 @@ if TYPE_CHECKING:
     )
     from .types.user import User as UserPayload
     from .types.embed import Embed as EmbedPayload
+    from .types.gateway import MessageReactionRemoveEvent
     from .abc import Snowflake
     from .abc import GuildChannel, PartialMessageableChannel, MessageableChannel
     from .components import Component
     from .state import ConnectionState
-    from .channel import TextChannel, GroupChannel, DMChannel, PartialMessageable
+    from .channel import TextChannel, GroupChannel, DMChannel
     from .mentions import AllowedMentions
     from .user import User
     from .role import Role
     from .ui.view import View
 
-    MR = TypeVar('MR', bound='MessageReference')
     EmojiInputType = Union[Emoji, PartialEmoji, str]
 
 __all__ = (
@@ -101,7 +117,7 @@ def convert_emoji_reaction(emoji):
         # No existing emojis have <> in them, so this should be okay.
         return emoji.strip('<>')
 
-    raise InvalidArgument(f'emoji argument must be str, Emoji, or Reaction not {emoji.__class__.__name__}.')
+    raise TypeError(f'emoji argument must be str, Emoji, or Reaction not {emoji.__class__.__name__}.')
 
 
 class Attachment(Hashable):
@@ -151,9 +167,13 @@ class Attachment(Hashable):
         The attachment's `media type <https://en.wikipedia.org/wiki/Media_type>`_
 
         .. versionadded:: 1.7
+    description: Optional[:class:`str`]
+        The attachment's description. Only applicable to images.
+
+        .. versionadded:: 2.0
     """
 
-    __slots__ = ('id', 'size', 'height', 'width', 'filename', 'url', 'proxy_url', '_http', 'content_type')
+    __slots__ = ('id', 'size', 'height', 'width', 'filename', 'url', 'proxy_url', '_http', 'content_type', 'description')
 
     def __init__(self, *, data: AttachmentPayload, state: ConnectionState):
         self.id: int = int(data['id'])
@@ -161,10 +181,11 @@ class Attachment(Hashable):
         self.height: Optional[int] = data.get('height')
         self.width: Optional[int] = data.get('width')
         self.filename: str = data['filename']
-        self.url: str = data.get('url')
-        self.proxy_url: str = data.get('proxy_url')
+        self.url: str = data['url']
+        self.proxy_url: str = data['proxy_url']
         self._http = state.http
         self.content_type: Optional[str] = data.get('content_type')
+        self.description: Optional[str] = data.get('description')
 
     def is_spoiler(self) -> bool:
         """:class:`bool`: Whether this attachment contains a spoiler."""
@@ -318,6 +339,8 @@ class Attachment(Hashable):
             result['width'] = self.width
         if self.content_type:
             result['content_type'] = self.content_type
+        if self.description is not None:
+            result['description'] = self.description
         return result
 
 
@@ -343,7 +366,7 @@ class DeletedReferencedMessage:
     def id(self) -> int:
         """:class:`int`: The message ID of the deleted referenced message."""
         # the parent's message id won't be None here
-        return self._parent.message_id # type: ignore
+        return self._parent.message_id  # type: ignore
 
     @property
     def channel_id(self) -> int:
@@ -401,7 +424,7 @@ class MessageReference:
         self.fail_if_not_exists: bool = fail_if_not_exists
 
     @classmethod
-    def with_state(cls: Type[MR], state: ConnectionState, data: MessageReferencePayload) -> MR:
+    def with_state(cls, state: ConnectionState, data: MessageReferencePayload) -> Self:
         self = cls.__new__(cls)
         self.message_id = utils._get_as_snowflake(data, 'message_id')
         self.channel_id = int(data.pop('channel_id'))
@@ -412,7 +435,7 @@ class MessageReference:
         return self
 
     @classmethod
-    def from_message(cls: Type[MR], message: Message, *, fail_if_not_exists: bool = True) -> MR:
+    def from_message(cls, message: Message, *, fail_if_not_exists: bool = True) -> Self:
         """Creates a :class:`MessageReference` from an existing :class:`~discord.Message`.
 
         .. versionadded:: 1.6
@@ -459,13 +482,13 @@ class MessageReference:
         return f'<MessageReference message_id={self.message_id!r} channel_id={self.channel_id!r} guild_id={self.guild_id!r}>'
 
     def to_dict(self) -> MessageReferencePayload:
-        result: MessageReferencePayload = {'message_id': self.message_id} if self.message_id is not None else {}
+        result: Dict[str, Any] = {'message_id': self.message_id} if self.message_id is not None else {}
         result['channel_id'] = self.channel_id
         if self.guild_id is not None:
             result['guild_id'] = self.guild_id
         if self.fail_if_not_exists is not None:
             result['fail_if_not_exists'] = self.fail_if_not_exists
-        return result
+        return result  # type: ignore - Type checker doesn't understand these are the same.
 
     to_message_reference_dict = to_dict
 
@@ -694,8 +717,10 @@ class Message(Hashable):
                     # Right now the channel IDs match but maybe in the future they won't.
                     if ref.channel_id == channel.id:
                         chan = channel
+                    elif isinstance(channel, Thread) and channel.parent_id == ref.channel_id:
+                        chan = channel
                     else:
-                        chan, _ = state._get_guild_channel(resolved)
+                        chan, _ = state._get_guild_channel(resolved, ref.guild_id)
 
                     # the channel will be the correct type here
                     ref.resolved = self.__class__(channel=chan, data=resolved, state=state)  # type: ignore
@@ -737,7 +762,7 @@ class Message(Hashable):
 
         return reaction
 
-    def _remove_reaction(self, data: ReactionPayload, emoji: EmojiInputType, user_id: int) -> Reaction:
+    def _remove_reaction(self, data: MessageReactionRemoveEvent, emoji: EmojiInputType, user_id: int) -> Reaction:
         reaction = utils.find(lambda r: r.emoji == emoji, self.reactions)
 
         if reaction is None:
@@ -1152,7 +1177,7 @@ class Message(Hashable):
         *,
         content: Optional[str] = ...,
         embed: Optional[Embed] = ...,
-        attachments: List[Attachment] = ...,
+        attachments: List[Union[Attachment, File]] = ...,
         suppress: bool = ...,
         delete_after: Optional[float] = ...,
         allowed_mentions: Optional[AllowedMentions] = ...,
@@ -1166,7 +1191,7 @@ class Message(Hashable):
         *,
         content: Optional[str] = ...,
         embeds: List[Embed] = ...,
-        attachments: List[Attachment] = ...,
+        attachments: List[Union[Attachment, File]] = ...,
         suppress: bool = ...,
         delete_after: Optional[float] = ...,
         allowed_mentions: Optional[AllowedMentions] = ...,
@@ -1179,7 +1204,7 @@ class Message(Hashable):
         content: Optional[str] = MISSING,
         embed: Optional[Embed] = MISSING,
         embeds: List[Embed] = MISSING,
-        attachments: List[Attachment] = MISSING,
+        attachments: List[Union[Attachment, File]] = MISSING,
         suppress: bool = MISSING,
         delete_after: Optional[float] = None,
         allowed_mentions: Optional[AllowedMentions] = MISSING,
@@ -1194,6 +1219,13 @@ class Message(Hashable):
         .. versionchanged:: 1.3
             The ``suppress`` keyword-only parameter was added.
 
+        .. versionchanged:: 2.0
+            Edits are no longer in-place, the newly edited role is returned instead.
+
+        .. versionchanged:: 2.0
+            This function no-longer raises ``InvalidArgument`` instead raising
+            :exc:`TypeError`.
+
         Parameters
         -----------
         content: Optional[:class:`str`]
@@ -1207,9 +1239,15 @@ class Message(Hashable):
             To remove all embeds ``[]`` should be passed.
 
             .. versionadded:: 2.0
-        attachments: List[:class:`Attachment`]
-            A list of attachments to keep in the message. If ``[]`` is passed
+        attachments: List[Union[:class:`Attachment`, :class:`File`]]
+            A list of attachments to keep in the message as well as new files to upload. If ``[]`` is passed
             then all attachments are removed.
+
+            .. note::
+
+                New files will always appear after current attachments.
+
+            .. versionadded:: 2.0
         suppress: :class:`bool`
             Whether to suppress embeds for the message. This removes
             all the embeds if set to ``True``. If set to ``False``
@@ -1239,54 +1277,35 @@ class Message(Hashable):
         Forbidden
             Tried to suppress a message without permissions or
             edited a message's content or embed that isn't yours.
-        ~discord.InvalidArgument
+        TypeError
             You specified both ``embed`` and ``embeds``
+
+        Returns
+        --------
+        :class:`Message`
+            The newly edited message.
         """
 
-        payload: Dict[str, Any] = {}
-        if content is not MISSING:
-            if content is not None:
-                payload['content'] = str(content)
-            else:
-                payload['content'] = None
-
-        if embed is not MISSING and embeds is not MISSING:
-            raise InvalidArgument('cannot pass both embed and embeds parameter to edit()')
-
-        if embed is not MISSING:
-            if embed is None:
-                payload['embeds'] = []
-            else:
-                payload['embeds'] = [embed.to_dict()]
-        elif embeds is not MISSING:
-            payload['embeds'] = [e.to_dict() for e in embeds]
-
+        previous_allowed_mentions = self._state.allowed_mentions
         if suppress is not MISSING:
             flags = MessageFlags._from_value(self.flags.value)
-            flags.suppress_embeds = suppress
-            payload['flags'] = flags.value
-
-        if allowed_mentions is MISSING:
-            if self._state.allowed_mentions is not None and self.author.id == self._state.self_id:
-                payload['allowed_mentions'] = self._state.allowed_mentions.to_dict()
         else:
-            if allowed_mentions is not None:
-                if self._state.allowed_mentions is not None:
-                    payload['allowed_mentions'] = self._state.allowed_mentions.merge(allowed_mentions).to_dict()
-                else:
-                    payload['allowed_mentions'] = allowed_mentions.to_dict()
-
-        if attachments is not MISSING:
-            payload['attachments'] = [a.to_dict() for a in attachments]
+            flags = MISSING
 
         if view is not MISSING:
             self._state.prevent_view_updates_for(self.id)
-            if view:
-                payload['components'] = view.to_components()
-            else:
-                payload['components'] = []
 
-        data = await self._state.http.edit_message(self.channel.id, self.id, **payload)
+        params = handle_message_parameters(
+            content=content,
+            flags=flags,
+            embed=embed,
+            embeds=embeds,
+            attachments=attachments,
+            view=view,
+            allowed_mentions=allowed_mentions,
+            previous_allowed_mentions=previous_allowed_mentions,
+        )
+        data = await self._state.http.edit_message(self.channel.id, self.id, params=params)
         message = Message(state=self._state, channel=self.channel, data=data)
 
         if view and not view.is_finished():
@@ -1296,6 +1315,58 @@ class Message(Hashable):
             await self.delete(delay=delete_after)
 
         return message
+
+    async def add_files(self, *files: File) -> Message:
+        r"""|coro|
+
+        Adds new files to the end of the message attachments.
+
+        .. versionadded:: 2.0
+
+        Parameters
+        -----------
+        \*files: :class:`File`
+            New files to add to the message.
+
+        Raises
+        -------
+        HTTPException
+            Editing the message failed.
+        Forbidden
+            Tried to edit a message that isn't yours.
+
+        Returns
+        --------
+        :class:`Message`
+            The newly edited message.
+        """
+        return await self.edit(attachments=[*self.attachments, *files])
+
+    async def remove_attachments(self, *attachments: Attachment) -> Message:
+        r"""|coro|
+
+        Removes attachments from the message.
+
+        .. versionadded:: 2.0
+
+        Parameters
+        -----------
+        \*attachments: :class:`Attachment`
+            Attachments to remove from the message.
+
+        Raises
+        -------
+        HTTPException
+            Editing the message failed.
+        Forbidden
+            Tried to edit a message that isn't yours.
+
+        Returns
+        --------
+        :class:`Message`
+            The newly edited message.
+        """
+        return await self.edit(attachments=[a for a in self.attachments if a not in attachments])
 
     async def publish(self) -> None:
         """|coro|
@@ -1374,7 +1445,7 @@ class Message(Hashable):
         await self._state.http.unpin_message(self.channel.id, self.id, reason=reason)
         self.pinned = False
 
-    async def add_reaction(self, emoji: EmojiInputType) -> None:
+    async def add_reaction(self, emoji: EmojiInputType, /) -> None:
         """|coro|
 
         Add a reaction to the message.
@@ -1384,6 +1455,14 @@ class Message(Hashable):
         You must have the :attr:`~Permissions.read_message_history` permission
         to use this. If nobody else has reacted to the message using this
         emoji, the :attr:`~Permissions.add_reactions` permission is required.
+
+        .. versionchanged:: 2.0
+
+            ``emoji`` parameter is now positional-only.
+
+        .. versionchanged:: 2.0
+            This function no-longer raises ``InvalidArgument`` instead raising
+            :exc:`TypeError`.
 
         Parameters
         ------------
@@ -1398,7 +1477,7 @@ class Message(Hashable):
             You do not have the proper permissions to react to the message.
         NotFound
             The emoji you specified was not found.
-        InvalidArgument
+        TypeError
             The emoji parameter is invalid.
         """
 
@@ -1418,6 +1497,10 @@ class Message(Hashable):
         The ``member`` parameter must represent a member and meet
         the :class:`abc.Snowflake` abc.
 
+        .. versionchanged:: 2.0
+            This function no-longer raises ``InvalidArgument`` instead raising
+            :exc:`TypeError`.
+
         Parameters
         ------------
         emoji: Union[:class:`Emoji`, :class:`Reaction`, :class:`PartialEmoji`, :class:`str`]
@@ -1433,7 +1516,7 @@ class Message(Hashable):
             You do not have the proper permissions to remove the reaction.
         NotFound
             The member or emoji you specified was not found.
-        InvalidArgument
+        TypeError
             The emoji parameter is invalid.
         """
 
@@ -1455,6 +1538,10 @@ class Message(Hashable):
 
         .. versionadded:: 1.3
 
+        .. versionchanged:: 2.0
+            This function no-longer raises ``InvalidArgument`` instead raising
+            :exc:`TypeError`.
+
         Parameters
         -----------
         emoji: Union[:class:`Emoji`, :class:`Reaction`, :class:`PartialEmoji`, :class:`str`]
@@ -1468,7 +1555,7 @@ class Message(Hashable):
             You do not have the proper permissions to clear the reaction.
         NotFound
             The emoji you specified was not found.
-        InvalidArgument
+        TypeError
             The emoji parameter is invalid.
         """
 
@@ -1517,7 +1604,7 @@ class Message(Hashable):
             You do not have permissions to create a thread.
         HTTPException
             Creating the thread failed.
-        InvalidArgument
+        ValueError
             This message does not have guild info attached.
 
         Returns
@@ -1526,7 +1613,7 @@ class Message(Hashable):
             The created thread.
         """
         if self.guild is None:
-            raise InvalidArgument('This message does not have guild info attached.')
+            raise ValueError('This message does not have guild info attached.')
 
         default_auto_archive_duration: ThreadArchiveDuration = getattr(self.channel, 'default_auto_archive_duration', 1440)
         data = await self._state.http.start_thread_with_message(
@@ -1545,15 +1632,20 @@ class Message(Hashable):
 
         .. versionadded:: 1.6
 
+        .. versionchanged:: 2.0
+            This function no-longer raises ``InvalidArgument`` instead raising
+            :exc:`ValueError` or :exc:`TypeError` in various cases.
+
         Raises
         --------
         ~discord.HTTPException
             Sending the message failed.
         ~discord.Forbidden
             You do not have the proper permissions to send the message.
-        ~discord.InvalidArgument
-            The ``files`` list is not of the appropriate size or
-            you specified both ``file`` and ``files``.
+        ValueError
+            The ``files`` list is not of the appropriate size
+        TypeError
+            You specified both ``file`` and ``files``.
 
         Returns
         ---------
@@ -1627,7 +1719,7 @@ class PartialMessage(Hashable):
 
     Attributes
     -----------
-    channel: Union[:class:`TextChannel`, :class:`Thread`, :class:`DMChannel`]
+    channel: Union[:class:`PartialMessageable`, :class:`TextChannel`, :class:`Thread`, :class:`DMChannel`]
         The channel associated with this partial message.
     id: :class:`int`
         The message ID.
@@ -1636,6 +1728,9 @@ class PartialMessage(Hashable):
     __slots__ = ('channel', 'id', '_cs_guild', '_state')
 
     jump_url: str = Message.jump_url  # type: ignore
+    edit = Message.edit
+    add_files = Message.add_files
+    remove_attachments = Message.remove_attachments
     delete = Message.delete
     publish = Message.publish
     pin = Message.pin
@@ -1649,7 +1744,7 @@ class PartialMessage(Hashable):
     to_message_reference_dict = Message.to_message_reference_dict
 
     def __init__(self, *, channel: PartialMessageableChannel, id: int):
-        if channel.type not in (
+        if not isinstance(channel, PartialMessageable) and channel.type not in (
             ChannelType.text,
             ChannelType.news,
             ChannelType.private,
@@ -1657,7 +1752,7 @@ class PartialMessage(Hashable):
             ChannelType.public_thread,
             ChannelType.private_thread,
         ):
-            raise TypeError(f'Expected TextChannel, DMChannel or Thread not {type(channel)!r}')
+            raise TypeError(f'Expected PartialMessageable, TextChannel, DMChannel or Thread not {type(channel)!r}')
 
         self.channel: PartialMessageableChannel = channel
         self._state: ConnectionState = channel._state
@@ -1707,123 +1802,3 @@ class PartialMessage(Hashable):
 
         data = await self._state.http.get_message(self.channel.id, self.id)
         return self._state.create_message(channel=self.channel, data=data)
-
-    async def edit(self, **fields: Any) -> Optional[Message]:
-        """|coro|
-
-        Edits the message.
-
-        The content must be able to be transformed into a string via ``str(content)``.
-
-        .. versionchanged:: 1.7
-            :class:`discord.Message` is returned instead of ``None`` if an edit took place.
-
-        Parameters
-        -----------
-        content: Optional[:class:`str`]
-            The new content to replace the message with.
-            Could be ``None`` to remove the content.
-        embed: Optional[:class:`Embed`]
-            The new embed to replace the original with.
-            Could be ``None`` to remove the embed.
-        suppress: :class:`bool`
-            Whether to suppress embeds for the message. This removes
-            all the embeds if set to ``True``. If set to ``False``
-            this brings the embeds back if they were suppressed.
-            Using this parameter requires :attr:`~.Permissions.manage_messages`.
-        delete_after: Optional[:class:`float`]
-            If provided, the number of seconds to wait in the background
-            before deleting the message we just edited. If the deletion fails,
-            then it is silently ignored.
-        allowed_mentions: Optional[:class:`~discord.AllowedMentions`]
-            Controls the mentions being processed in this message. If this is
-            passed, then the object is merged with :attr:`~discord.Client.allowed_mentions`.
-            The merging behaviour only overrides attributes that have been explicitly passed
-            to the object, otherwise it uses the attributes set in :attr:`~discord.Client.allowed_mentions`.
-            If no object is passed at all then the defaults given by :attr:`~discord.Client.allowed_mentions`
-            are used instead.
-        view: Optional[:class:`~discord.ui.View`]
-            The updated view to update this message with. If ``None`` is passed then
-            the view is removed.
-
-            .. versionadded:: 2.0
-
-        Raises
-        -------
-        NotFound
-            The message was not found.
-        HTTPException
-            Editing the message failed.
-        Forbidden
-            Tried to suppress a message without permissions or
-            edited a message's content or embed that isn't yours.
-
-        Returns
-        ---------
-        Optional[:class:`Message`]
-            The message that was edited.
-        """
-
-        try:
-            content = fields['content']
-        except KeyError:
-            pass
-        else:
-            if content is not None:
-                fields['content'] = str(content)
-
-        try:
-            embed = fields['embed']
-        except KeyError:
-            pass
-        else:
-            if embed is not None:
-                fields['embed'] = embed.to_dict()
-
-        try:
-            suppress: bool = fields.pop('suppress')
-        except KeyError:
-            pass
-        else:
-            flags = MessageFlags._from_value(0)
-            flags.suppress_embeds = suppress
-            fields['flags'] = flags.value
-
-        delete_after = fields.pop('delete_after', None)
-
-        try:
-            allowed_mentions = fields.pop('allowed_mentions')
-        except KeyError:
-            pass
-        else:
-            if allowed_mentions is not None:
-                if self._state.allowed_mentions is not None:
-                    allowed_mentions = self._state.allowed_mentions.merge(allowed_mentions).to_dict()
-                else:
-                    allowed_mentions = allowed_mentions.to_dict()
-                fields['allowed_mentions'] = allowed_mentions
-
-        try:
-            view = fields.pop('view')
-        except KeyError:
-            # To check for the view afterwards
-            view = None
-        else:
-            self._state.prevent_view_updates_for(self.id)
-            if view:
-                fields['components'] = view.to_components()
-            else:
-                fields['components'] = []
-
-        if fields:
-            data = await self._state.http.edit_message(self.channel.id, self.id, **fields)
-
-        if delete_after is not None:
-            await self.delete(delay=delete_after)
-
-        if fields:
-            # data isn't unbound
-            msg = self._state.create_message(channel=self.channel, data=data)  # type: ignore
-            if view and not view.is_finished():
-                self._state.store_view(view, self.id)
-            return msg

@@ -48,9 +48,11 @@ from collections.abc import Sequence
 from discord.backoff import ExponentialBackoff
 from discord.utils import MISSING
 
+# fmt: off
 __all__ = (
     'loop',
 )
+# fmt: on
 
 T = TypeVar('T')
 _func = Callable[..., Awaitable[Any]]
@@ -158,9 +160,14 @@ class Loop(Generic[LF]):
             self._next_iteration = self._get_next_sleep_time()
         else:
             self._next_iteration = datetime.datetime.now(datetime.timezone.utc)
+            await asyncio.sleep(0)  # allows canceling in before_loop
         try:
-            await self._try_sleep_until(self._next_iteration)
+            if self._stop_next_iteration:  # allow calling stop() before first iteration
+                return
             while True:
+                # sleep before the body of the task for explicit time intervals
+                if self._time is not MISSING:
+                    await self._try_sleep_until(self._next_iteration)
                 if not self._last_iteration_failed:
                     self._last_iteration = self._next_iteration
                     self._next_iteration = self._get_next_sleep_time()
@@ -173,16 +180,12 @@ class Loop(Generic[LF]):
                         raise
                     await asyncio.sleep(backoff.delay())
                 else:
-                    await self._try_sleep_until(self._next_iteration)
-
                     if self._stop_next_iteration:
                         return
 
-                    now = datetime.datetime.now(datetime.timezone.utc)
-                    if now > self._next_iteration:
-                        self._next_iteration = now
-                        if self._time is not MISSING:
-                            self._prepare_time_index(now)
+                    # sleep after the body of the task for relative time intervals
+                    if self._time is MISSING:
+                        await self._try_sleep_until(self._next_iteration)
 
                     self._current_loop += 1
                     if self._current_loop == self.count:
@@ -350,6 +353,9 @@ class Loop(Generic[LF]):
             before stopping via :meth:`clear_exception_types` or
             use :meth:`cancel` instead.
 
+        .. versionchanged:: 2.0
+            Calling this method in :meth:`before_loop` will stop the first iteration from running.
+
         .. versionadded:: 1.2
         """
         if self._task is not MISSING and not self._task.done():
@@ -477,6 +483,9 @@ class Loop(Generic[LF]):
 
         The coroutine must take no arguments (except ``self`` in a class context).
 
+        .. versionchanged:: 2.0
+            Calling :meth:`stop` in this coroutine will stop the initial iteration from running.
+
         Parameters
         ------------
         coro: :ref:`coroutine <coroutine>`
@@ -582,12 +591,13 @@ class Loop(Generic[LF]):
         time_now = (
             now if now is not MISSING else datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
         ).timetz()
+        idx = -1
         for idx, time in enumerate(self._time):
             if time >= time_now:
                 self._time_index = idx
                 break
         else:
-            self._time_index = 0
+            self._time_index = idx + 1
 
     def _get_time_parameter(
         self,

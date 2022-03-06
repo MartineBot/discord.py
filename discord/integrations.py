@@ -28,7 +28,6 @@ import datetime
 from typing import Any, Dict, Optional, TYPE_CHECKING, overload, Type, Tuple
 from .utils import _get_as_snowflake, parse_time, MISSING
 from .user import User
-from .errors import InvalidArgument
 from .enums import try_enum, ExpireBehaviour
 
 __all__ = (
@@ -215,6 +214,7 @@ class StreamIntegration(Integration):
     @property
     def role(self) -> Optional[Role]:
         """Optional[:class:`Role`] The role which the integration uses for subscribers."""
+        # The key is `int` but `int | None` will return `None` anyway.
         return self.guild.get_role(self._role_id)  # type: ignore
 
     async def edit(
@@ -231,6 +231,10 @@ class StreamIntegration(Integration):
         You must have the :attr:`~Permissions.manage_guild` permission to
         do this.
 
+        .. versionchanged:: 2.0
+            This function no-longer raises ``InvalidArgument`` instead raising
+            :exc:`TypeError`.
+
         Parameters
         -----------
         expire_behaviour: :class:`ExpireBehaviour`
@@ -246,13 +250,13 @@ class StreamIntegration(Integration):
             You do not have permission to edit the integration.
         HTTPException
             Editing the guild failed.
-        InvalidArgument
+        TypeError
             ``expire_behaviour`` did not receive a :class:`ExpireBehaviour`.
         """
         payload: Dict[str, Any] = {}
         if expire_behaviour is not MISSING:
             if not isinstance(expire_behaviour, ExpireBehaviour):
-                raise InvalidArgument('expire_behaviour field must be of type ExpireBehaviour')
+                raise TypeError('expire_behaviour field must be of type ExpireBehaviour')
 
             payload['expire_behavior'] = expire_behaviour.value
 

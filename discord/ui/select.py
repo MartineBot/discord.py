@@ -31,7 +31,6 @@ from .item import Item, ItemCallbackType
 from ..enums import ComponentType
 from ..partial_emoji import PartialEmoji
 from ..emoji import Emoji
-from ..interactions import Interaction
 from ..utils import MISSING
 from ..components import (
     SelectOption,
@@ -44,13 +43,14 @@ __all__ = (
 )
 
 if TYPE_CHECKING:
+    from typing_extensions import Self
+
     from .view import View
     from ..types.components import SelectMenu as SelectMenuPayload
     from ..types.interactions import (
-        ComponentInteractionData,
+        MessageComponentInteractionData,
     )
 
-S = TypeVar('S', bound='Select')
 V = TypeVar('V', bound='View', covariant=True)
 
 
@@ -224,7 +224,6 @@ class Select(Item[V]):
             default=default,
         )
 
-
         self.append_option(option)
 
     def append_option(self, option: SelectOption):
@@ -270,12 +269,11 @@ class Select(Item[V]):
     def refresh_component(self, component: SelectMenu) -> None:
         self._underlying = component
 
-    def refresh_state(self, interaction: Interaction) -> None:
-        data: ComponentInteractionData = interaction.data  # type: ignore
+    def refresh_state(self, data: MessageComponentInteractionData) -> None:
         self._selected_values = data.get('values', [])
 
     @classmethod
-    def from_component(cls: Type[S], component: SelectMenu) -> S:
+    def from_component(cls, component: SelectMenu) -> Self:
         return cls(
             custom_id=component.custom_id,
             placeholder=component.placeholder,
@@ -303,7 +301,7 @@ def select(
     options: List[SelectOption] = MISSING,
     disabled: bool = False,
     row: Optional[int] = None,
-) -> Callable[[ItemCallbackType], ItemCallbackType]:
+) -> Callable[[ItemCallbackType[V, Select[V]]], Select[V]]:
     """A decorator that attaches a select menu to a component.
 
     The function being decorated should have three parameters, ``self`` representing
@@ -338,7 +336,7 @@ def select(
         Whether the select is disabled or not. Defaults to ``False``.
     """
 
-    def decorator(func: ItemCallbackType) -> ItemCallbackType:
+    def decorator(func: ItemCallbackType[V, Select[V]]) -> ItemCallbackType[V, Select[V]]:
         if not inspect.iscoroutinefunction(func):
             raise TypeError('select function must be a coroutine function')
 
@@ -354,4 +352,4 @@ def select(
         }
         return func
 
-    return decorator
+    return decorator  # type: ignore

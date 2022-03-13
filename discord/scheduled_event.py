@@ -80,7 +80,7 @@ class ScheduledEvent(Hashable):
         The scheduled event's ID.
     name: :class:`str`
         The name of the scheduled event.
-    description: :class:`str`
+    description: Optional[:class:`str`]
         The description of the scheduled event.
     entity_type: :class:`EntityType`
         The type of entity this event is for.
@@ -88,7 +88,7 @@ class ScheduledEvent(Hashable):
         The ID of the entity this event is for if available.
     start_time: :class:`datetime.datetime`
         The time that the scheduled event will start in UTC.
-    end_time: :class:`datetime.datetime`
+    end_time: Optional[:class:`datetime.datetime`]
         The time that the scheduled event will end in UTC.
     privacy_level: :class:`PrivacyLevel`
         The privacy level of the scheduled event.
@@ -131,7 +131,7 @@ class ScheduledEvent(Hashable):
         self.id: int = int(data['id'])
         self.guild_id: int = int(data['guild_id'])
         self.name: str = data['name']
-        self.description: str = data.get('description', '')
+        self.description: Optional[str] = data.get('description')
         self.entity_type = try_enum(EntityType, data['entity_type'])
         self.entity_id: Optional[int] = _get_as_snowflake(data, 'entity_id')
         self.start_time: datetime = parse_time(data['scheduled_start_time'])
@@ -149,7 +149,7 @@ class ScheduledEvent(Hashable):
         metadata = data.get('entity_metadata')
         self._unroll_metadata(metadata)
 
-    def _unroll_metadata(self, data: EntityMetadata):
+    def _unroll_metadata(self, data: Optional[EntityMetadata]):
         self.location: Optional[str] = data.get('location') if data else None
 
     @classmethod
@@ -296,7 +296,7 @@ class ScheduledEvent(Hashable):
         description: str = MISSING,
         channel: Optional[Snowflake] = MISSING,
         start_time: datetime = MISSING,
-        end_time: datetime = MISSING,
+        end_time: Optional[datetime] = MISSING,
         privacy_level: PrivacyLevel = MISSING,
         entity_type: EntityType = MISSING,
         status: EventStatus = MISSING,
@@ -436,8 +436,9 @@ class ScheduledEvent(Hashable):
                     raise ValueError(
                         'end_time must be an aware datetime. Consider using discord.utils.utcnow() or datetime.datetime.now().astimezone() for local time.'
                     )
-                end_time = end_time.isoformat()
-            payload['scheduled_end_time'] = end_time
+                payload['scheduled_end_time'] = end_time.isoformat()
+            else:
+                payload['scheduled_end_time'] = end_time
 
         if metadata:
             payload['entity_metadata'] = metadata
@@ -491,7 +492,7 @@ class ScheduledEvent(Hashable):
         Returns
         --------
         List[:class:`User`]
-            All thread members in the thread.
+            All subscribed users of this event.
         """
 
         async def _before_strategy(retrieve, before, limit):
@@ -565,4 +566,4 @@ class ScheduledEvent(Hashable):
         self._users[user.id] = user
 
     def _pop_user(self, user_id: int) -> None:
-        self._users.pop(user_id)
+        self._users.pop(user_id, None)

@@ -40,7 +40,7 @@ from .errors import (
 )
 from ..errors import ClientException
 from ..enums import AppCommandType, InteractionType
-from ..utils import MISSING
+from ..utils import MISSING, _get_as_snowflake, _is_submodule
 
 if TYPE_CHECKING:
     from ..types.interactions import ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption
@@ -55,7 +55,7 @@ ClientT = TypeVar('ClientT', bound='Client')
 
 
 def _retrieve_guild_ids(
-    callback: Any, guild: Optional[Snowflake] = MISSING, guilds: List[Snowflake] = MISSING
+    command: Any, guild: Optional[Snowflake] = MISSING, guilds: List[Snowflake] = MISSING
 ) -> Optional[Set[int]]:
     if guild is not MISSING and guilds is not MISSING:
         raise TypeError('cannot mix guild and guilds keyword arguments')
@@ -64,8 +64,8 @@ def _retrieve_guild_ids(
     if guild is MISSING:
         # If no arguments are given then it should default to the ones
         # given to the guilds(...) decorator or None for global.
-        if guild is MISSING:
-            return getattr(callback, '__discord_app_commands_default_guilds__', None)
+        if guilds is MISSING:
+            return getattr(command, '_guild_ids', None)
 
         # guilds=[] is the same as global
         if len(guilds) == 0:
@@ -93,6 +93,10 @@ class CommandTree(Generic[ClientT]):
         self.client: ClientT = client
         self._http = client.http
         self._state = client._connection
+
+        if self._state._command_tree is not None:
+            raise ClientException('This client already has an associated command tree.')
+
         self._state._command_tree = self
         self._guild_commands: Dict[int, Dict[str, Union[Command, Group]]] = {}
         self._global_commands: Dict[str, Union[Command, Group]] = {}
@@ -185,7 +189,7 @@ class CommandTree(Generic[ClientT]):
             This is currently 100 for slash commands and 5 for context menu commands.
         """
 
-        guild_ids = _retrieve_guild_ids(getattr(command, '_callback', None), guild, guilds)
+        guild_ids = _retrieve_guild_ids(command, guild, guilds)
         if isinstance(command, ContextMenu):
             type = command.type.value
             name = command.name
@@ -477,12 +481,39 @@ class CommandTree(Generic[ClientT]):
             try:
                 commands = self._guild_commands[guild.id]
             except KeyError:
-                return [cmd for ((_, g, _), cmd) in self._context_menus.items() if g is None]
+                guild_id = guild.id
+                return [cmd for ((_, g, _), cmd) in self._context_menus.items() if g == guild_id]
             else:
                 base: List[Union[Command, Group, ContextMenu]] = list(commands.values())
                 guild_id = guild.id
                 base.extend(cmd for ((_, g, _), cmd) in self._context_menus.items() if g == guild_id)
                 return base
+
+    def _remove_with_module(self, name: str) -> None:
+        remove: List[Any] = []
+        for key, cmd in self._context_menus.items():
+            if cmd.module is not None and _is_submodule(name, cmd.module):
+                remove.append(key)
+
+        for key in remove:
+            del self._context_menus[key]
+
+        remove = []
+        for key, cmd in self._global_commands.items():
+            if cmd.module is not None and _is_submodule(name, cmd.module):
+                remove.append(key)
+
+        for key in remove:
+            del self._global_commands[key]
+
+        for mapping in self._guild_commands.values():
+            remove = []
+            for key, cmd in mapping.items():
+                if cmd.module is not None and _is_submodule(name, cmd.module):
+                    remove.append(key)
+
+            for key in remove:
+                del mapping[key]
 
     async def on_error(
         self,
@@ -667,7 +698,7 @@ class CommandTree(Generic[ClientT]):
 
     async def _call_context_menu(self, interaction: Interaction, data: ApplicationCommandInteractionData, type: int):
         name = data['name']
-        guild_id = interaction.guild_id
+        guild_id = _get_as_snowflake(data, 'guild_id')
         ctx_menu = self._context_menus.get((name, guild_id, type))
         if ctx_menu is None:
             raise CommandNotFound(name, [], AppCommandType(type))
@@ -725,14 +756,17 @@ class CommandTree(Generic[ClientT]):
 
         parents: List[str] = []
         name = data['name']
-        command = self._global_commands.get(name)
-        if interaction.guild_id:
+
+        command_guild_id = _get_as_snowflake(data, 'guild_id')
+        if command_guild_id:
             try:
-                guild_commands = self._guild_commands[interaction.guild_id]
+                guild_commands = self._guild_commands[command_guild_id]
             except KeyError:
-                pass
+                command = None
             else:
-                command = guild_commands.get(name) or command
+                command = guild_commands.get(name)
+        else:
+            command = self._global_commands.get(name)
 
         # If it's not found at this point then it's not gonna be found at any point
         if command is None:

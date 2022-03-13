@@ -1240,8 +1240,8 @@ class Message(Hashable):
             Edits are no longer in-place, the newly edited message is returned instead.
 
         .. versionchanged:: 2.0
-            This function no-longer raises ``InvalidArgument`` instead raising
-            :exc:`TypeError`.
+            This function will now raise :exc:`TypeError` instead of
+            ``InvalidArgument``.
 
         Parameters
         -----------
@@ -1306,6 +1306,7 @@ class Message(Hashable):
         previous_allowed_mentions = self._state.allowed_mentions
         if suppress is not MISSING:
             flags = MessageFlags._from_value(self.flags.value)
+            flags.suppress_embeds = suppress
         else:
             flags = MISSING
 
@@ -1478,8 +1479,8 @@ class Message(Hashable):
             ``emoji`` parameter is now positional-only.
 
         .. versionchanged:: 2.0
-            This function no-longer raises ``InvalidArgument`` instead raising
-            :exc:`TypeError`.
+            This function will now raise :exc:`TypeError` instead of
+            ``InvalidArgument``.
 
         Parameters
         ------------
@@ -1515,8 +1516,8 @@ class Message(Hashable):
         the :class:`abc.Snowflake` abc.
 
         .. versionchanged:: 2.0
-            This function no-longer raises ``InvalidArgument`` instead raising
-            :exc:`TypeError`.
+            This function will now raise :exc:`TypeError` instead of
+            ``InvalidArgument``.
 
         Parameters
         ------------
@@ -1556,8 +1557,8 @@ class Message(Hashable):
         .. versionadded:: 1.3
 
         .. versionchanged:: 2.0
-            This function no-longer raises ``InvalidArgument`` instead raising
-            :exc:`TypeError`.
+            This function will now raise :exc:`TypeError` instead of
+            ``InvalidArgument``.
 
         Parameters
         -----------
@@ -1665,8 +1666,8 @@ class Message(Hashable):
         .. versionadded:: 1.6
 
         .. versionchanged:: 2.0
-            This function no-longer raises ``InvalidArgument`` instead raising
-            :exc:`ValueError` or :exc:`TypeError` in various cases.
+            This function will now raise :exc:`TypeError` or
+            :exc:`ValueError` instead of ``InvalidArgument``.
 
         Raises
         --------

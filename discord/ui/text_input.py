@@ -122,7 +122,7 @@ class TextInput(Item[V]):
 
     @property
     def custom_id(self) -> str:
-        """:class:`str`: The ID of the select menu that gets received during an interaction."""
+        """:class:`str`: The ID of the text input that gets received during an interaction."""
         return self._underlying.custom_id
 
     @custom_id.setter
@@ -207,10 +207,10 @@ class TextInput(Item[V]):
     def to_component_dict(self) -> TextInputPayload:
         return self._underlying.to_dict()
 
-    def refresh_component(self, component: TextInputComponent) -> None:
+    def _refresh_component(self, component: TextInputComponent) -> None:
         self._underlying = component
 
-    def refresh_state(self, data: ModalSubmitTextInputInteractionDataPayload) -> None:
+    def _refresh_state(self, data: ModalSubmitTextInputInteractionDataPayload) -> None:
         self._value = data.get('value', None)
 
     @classmethod

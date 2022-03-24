@@ -31,6 +31,7 @@ from typing import (
     ClassVar,
     Coroutine,
     Dict,
+    Generator,
     Generic,
     List,
     Optional,
@@ -46,17 +47,17 @@ from textwrap import TextWrapper
 import re
 
 from ..enums import AppCommandOptionType, AppCommandType
-from ..interactions import Interaction
 from .models import Choice
 from .transformers import annotation_to_parameter, CommandParameter, NoneType
-from .errors import AppCommandError, CommandInvokeError, CommandSignatureMismatch, CommandAlreadyRegistered
+from .errors import AppCommandError, CheckFailure, CommandInvokeError, CommandSignatureMismatch, CommandAlreadyRegistered
 from ..message import Message
 from ..user import User
 from ..member import Member
-from ..utils import resolve_annotation, MISSING, is_inside_class
+from ..utils import resolve_annotation, MISSING, is_inside_class, maybe_coroutine, async_all
 
 if TYPE_CHECKING:
     from typing_extensions import ParamSpec, Concatenate
+    from ..interactions import Interaction
     from ..abc import Snowflake
     from .namespace import Namespace
     from .models import ChoiceT
@@ -73,6 +74,7 @@ __all__ = (
     'context_menu',
     'command',
     'describe',
+    'check',
     'choices',
     'autocomplete',
     'guilds',
@@ -86,33 +88,35 @@ else:
 T = TypeVar('T')
 GroupT = TypeVar('GroupT', bound='Union[Group, Cog]')
 Coro = Coroutine[Any, Any, T]
+UnboundError = Callable[['Interaction', AppCommandError], Coro[Any]]
 Error = Union[
-    Callable[[GroupT, Interaction, AppCommandError], Coro[Any]],
-    Callable[[Interaction, AppCommandError], Coro[Any]],
+    Callable[[GroupT, 'Interaction', AppCommandError], Coro[Any]],
+    UnboundError,
 ]
+Check = Callable[['Interaction'], Union[bool, Coro[bool]]]
 
 
 if TYPE_CHECKING:
     CommandCallback = Union[
-        Callable[Concatenate[GroupT, Interaction, P], Coro[T]],
-        Callable[Concatenate[Interaction, P], Coro[T]],
+        Callable[Concatenate[GroupT, 'Interaction', P], Coro[T]],
+        Callable[Concatenate['Interaction', P], Coro[T]],
     ]
 
     ContextMenuCallback = Union[
         # If groups end up support context menus these would be uncommented
-        # Callable[[GroupT, Interaction, Member], Coro[Any]],
-        # Callable[[GroupT, Interaction, User], Coro[Any]],
-        # Callable[[GroupT, Interaction, Message], Coro[Any]],
-        # Callable[[GroupT, Interaction, Union[Member, User]], Coro[Any]],
-        Callable[[Interaction, Member], Coro[Any]],
-        Callable[[Interaction, User], Coro[Any]],
-        Callable[[Interaction, Message], Coro[Any]],
-        Callable[[Interaction, Union[Member, User]], Coro[Any]],
+        # Callable[[GroupT, 'Interaction', Member], Coro[Any]],
+        # Callable[[GroupT, 'Interaction', User], Coro[Any]],
+        # Callable[[GroupT, 'Interaction', Message], Coro[Any]],
+        # Callable[[GroupT, 'Interaction', Union[Member, User]], Coro[Any]],
+        Callable[['Interaction', Member], Coro[Any]],
+        Callable[['Interaction', User], Coro[Any]],
+        Callable[['Interaction', Message], Coro[Any]],
+        Callable[['Interaction', Union[Member, User]], Coro[Any]],
     ]
 
     AutocompleteCallback = Union[
-        Callable[[GroupT, Interaction, ChoiceT, Namespace], Coro[List[Choice[ChoiceT]]]],
-        Callable[[Interaction, ChoiceT, Namespace], Coro[List[Choice[ChoiceT]]]],
+        Callable[[GroupT, 'Interaction', ChoiceT], Coro[List[Choice[ChoiceT]]]],
+        Callable[['Interaction', ChoiceT], Coro[List[Choice[ChoiceT]]]],
     ]
 else:
     CommandCallback = Callable[..., Coro[T]]
@@ -120,6 +124,7 @@ else:
     AutocompleteCallback = Callable[..., Coro[T]]
 
 
+CheckInputParameter = Union['Command[Any, ..., Any]', 'ContextMenu', CommandCallback, ContextMenuCallback]
 VALID_SLASH_COMMAND_NAME = re.compile(r'^[\w-]{1,32}$')
 VALID_CONTEXT_MENU_NAME = re.compile(r'^[\w\s-]{1,32}$')
 CAMEL_CASE_REGEX = re.compile(r'(?<!^)(?=[A-Z])')
@@ -128,7 +133,7 @@ CAMEL_CASE_REGEX = re.compile(r'(?<!^)(?=[A-Z])')
 def _shorten(
     input: str,
     *,
-    _wrapper: TextWrapper = TextWrapper(width=100, max_lines=1, replace_whitespace=True, placeholder='...'),
+    _wrapper: TextWrapper = TextWrapper(width=100, max_lines=1, replace_whitespace=True, placeholder='…'),
 ) -> str:
     return _wrapper.fill(' '.join(input.strip().split()))
 
@@ -141,7 +146,12 @@ def validate_name(name: str) -> str:
     match = VALID_SLASH_COMMAND_NAME.match(name)
     if match is None:
         raise ValueError('names must be between 1-32 characters')
-    if not name.islower():
+
+    # Ideally, name.islower() would work instead but since certain characters
+    # are Lo (e.g. CJK) those don't pass the test. I'd use `casefold` instead as
+    # well, but chances are the server-side check is probably something similar to
+    # this code anyway.
+    if name.lower() != name:
         raise ValueError('names must be all lower case')
     return name
 
@@ -157,16 +167,16 @@ def _validate_auto_complete_callback(
 ) -> AutocompleteCallback[GroupT, ChoiceT]:
 
     requires_binding = is_inside_class(callback)
-    required_parameters = 3 + requires_binding
+    required_parameters = 2 + requires_binding
     callback.requires_binding = requires_binding
     params = inspect.signature(callback).parameters
-    if len(params) < required_parameters:
-        raise TypeError('autocomplete callback requires either 3 or 4 parameters to be passed')
+    if len(params) != required_parameters:
+        raise TypeError('autocomplete callback requires either 2 or 3 parameters to be passed')
 
     return callback
 
 
-def _context_menu_annotation(annotation: Any, *, _none=NoneType) -> AppCommandType:
+def _context_menu_annotation(annotation: Any, *, _none: type = NoneType) -> AppCommandType:
     if annotation is Message:
         return AppCommandType.message
 
@@ -195,7 +205,7 @@ def _populate_descriptions(params: Dict[str, CommandParameter], descriptions: Di
     for name, param in params.items():
         description = descriptions.pop(name, MISSING)
         if description is MISSING:
-            param.description = '...'
+            param.description = '…'
             continue
 
         if not isinstance(description, str):
@@ -245,6 +255,11 @@ def _populate_autocomplete(params: Dict[str, CommandParameter], autocomplete: Di
         if param.type not in (AppCommandOptionType.string, AppCommandOptionType.number, AppCommandOptionType.integer):
             raise TypeError('autocomplete is only supported for integer, string, or number option types')
 
+        if param.is_choice_annotation():
+            raise TypeError(
+                'Choice annotation unsupported for autocomplete parameters, consider using a regular annotation instead'
+            )
+
         param.autocomplete = _validate_auto_complete_callback(callback)
 
     if autocomplete:
@@ -280,7 +295,7 @@ def _extract_parameters_from_callback(func: Callable[..., Any], globalns: Dict[s
     except AttributeError:
         for param in values:
             if param.description is MISSING:
-                param.description = '...'
+                param.description = '…'
     else:
         _populate_descriptions(result, descriptions)
 
@@ -345,6 +360,12 @@ class Command(Generic[GroupT, P, T]):
     description: :class:`str`
         The description of the application command. This shows up in the UI to describe
         the application command.
+    checks
+        A list of predicates that take a :class:`~discord.Interaction` parameter
+        to indicate whether the command callback should be executed. If an exception
+        is necessary to be thrown to signal failure, then one inherited from
+        :exc:`AppCommandError` should be used. If all the checks fail without
+        propagating an exception, :exc:`CheckFailure` is raised.
     parent: Optional[:class:`Group`]
         The parent application command. ``None`` if there isn't one.
     """
@@ -375,6 +396,7 @@ class Command(Generic[GroupT, P, T]):
             pass
 
         self._params: Dict[str, CommandParameter] = _extract_parameters_from_callback(callback, callback.__globals__)
+        self.checks: List[Check] = getattr(callback, '__discord_app_commands_checks__', [])
         self._guild_ids: Optional[List[int]] = guild_ids or getattr(
             callback, '__discord_app_commands_default_guilds__', None
         )
@@ -395,6 +417,7 @@ class Command(Generic[GroupT, P, T]):
         copy = cls.__new__(cls)
         copy.name = self.name
         copy._guild_ids = self._guild_ids
+        copy.checks = self.checks
         copy.description = self.description
         copy._attr = self._attr
         copy._callback = self._callback
@@ -431,7 +454,27 @@ class Command(Generic[GroupT, P, T]):
             if parent.parent is not None:
                 await parent.parent.on_error(interaction, self, error)
 
+    def _has_any_error_handlers(self) -> bool:
+        if self.on_error is not None:
+            return True
+
+        parent = self.parent
+        if parent is not None:
+            # Check if the on_error is overridden
+            if parent.__class__.on_error is not Group.on_error:
+                return True
+
+            if parent.parent is not None:
+                parent_cls = parent.parent.__class__
+                if parent_cls.on_error is not Group.on_error:
+                    return True
+
+        return False
+
     async def _invoke_with_namespace(self, interaction: Interaction, namespace: Namespace) -> T:
+        if not await self._check_can_run(interaction):
+            raise CheckFailure(f'The check functions for command {self.name!r} failed.')
+
         values = namespace.__dict__
         for name, param in self._params.items():
             try:
@@ -482,11 +525,11 @@ class Command(Generic[GroupT, P, T]):
 
         if param.autocomplete.requires_binding:
             if self.binding is not None:
-                choices = await param.autocomplete(self.binding, interaction, value, namespace)
+                choices = await param.autocomplete(self.binding, interaction, value)
             else:
                 raise TypeError('autocomplete parameter expected a bound self parameter but one was not provided')
         else:
-            choices = await param.autocomplete(interaction, value, namespace)
+            choices = await param.autocomplete(interaction, value)
 
         if interaction.response.is_done():
             return
@@ -503,6 +546,34 @@ class Command(Generic[GroupT, P, T]):
             return None
         parent = self.parent
         return parent.parent or parent
+
+    async def _check_can_run(self, interaction: Interaction) -> bool:
+        if self.parent is not None and self.parent is not self.binding:
+            # For commands with a parent which isn't the binding, i.e.
+            # <binding>
+            #     <parent>
+            #         <command>
+            # The parent check needs to be called first
+            if not await maybe_coroutine(self.parent.interaction_check, interaction):
+                return False
+
+        if self.binding is not None:
+            try:
+                # Type checker does not like runtime attribute retrieval
+                check: Check = self.binding.interaction_check  # type: ignore
+            except AttributeError:
+                pass
+            else:
+                ret = await maybe_coroutine(check, interaction)
+                if not ret:
+                    return False
+
+        predicates = self.checks
+        if not predicates:
+            return True
+
+        # Type checker does not understand negative narrowing cases like this function
+        return await async_all(f(interaction) for f in predicates)  # type: ignore
 
     def error(self, coro: Error[GroupT]) -> Error[GroupT]:
         """A decorator that registers a coroutine as a local error handler.
@@ -535,10 +606,13 @@ class Command(Generic[GroupT, P, T]):
     ) -> Callable[[AutocompleteCallback[GroupT, ChoiceT]], AutocompleteCallback[GroupT, ChoiceT]]:
         """A decorator that registers a coroutine as an autocomplete prompt for a parameter.
 
-        The coroutine callback must have 3 parameters, the :class:`~discord.Interaction`,
-        the current value by the user (usually either a :class:`str`, :class:`int`, or :class:`float`,
-        depending on the type of the parameter being marked as autocomplete), and then the
-        :class:`Namespace` that represents possible values are partially filled in.
+        The coroutine callback must have 2 parameters, the :class:`~discord.Interaction`,
+        and the current value by the user (usually either a :class:`str`, :class:`int`, or :class:`float`,
+        depending on the type of the parameter being marked as autocomplete).
+
+        To get the values from other parameters that may be filled in, accessing
+        :attr:`.Interaction.namespace` will give a :class:`Namespace` object with those
+        values.
 
         The coroutine decorator **must** return a list of :class:`~discord.app_commands.Choice` objects.
         Only up to 25 objects are supported.
@@ -555,7 +629,6 @@ class Command(Generic[GroupT, P, T]):
             async def fruits_autocomplete(
                 interaction: discord.Interaction,
                 current: str,
-                namespace: app_commands.Namespace
             ) -> List[app_commands.Choice[str]]:
                 fruits = ['Banana', 'Pineapple', 'Apple', 'Watermelon', 'Melon', 'Cherry']
                 return [
@@ -588,10 +661,45 @@ class Command(Generic[GroupT, P, T]):
             if param.type not in (AppCommandOptionType.string, AppCommandOptionType.number, AppCommandOptionType.integer):
                 raise TypeError('autocomplete is only supported for integer, string, or number option types')
 
+            if param.is_choice_annotation():
+                raise TypeError(
+                    'Choice annotation unsupported for autocomplete parameters, consider using a regular annotation instead'
+                )
+
             param.autocomplete = _validate_auto_complete_callback(coro)
             return coro
 
         return decorator
+
+    def add_check(self, func: Check, /) -> None:
+        """Adds a check to the command.
+
+        This is the non-decorator interface to :func:`check`.
+
+        Parameters
+        -----------
+        func
+            The function that will be used as a check.
+        """
+
+        self.checks.append(func)
+
+    def remove_check(self, func: Check, /) -> None:
+        """Removes a check from the command.
+
+        This function is idempotent and will not raise an exception
+        if the function is not in the command's checks.
+
+        Parameters
+        -----------
+        func
+            The function to remove from the checks.
+        """
+
+        try:
+            self.checks.remove(func)
+        except ValueError:
+            pass
 
 
 class ContextMenu:
@@ -611,6 +719,12 @@ class ContextMenu:
         The name of the context menu.
     type: :class:`.AppCommandType`
         The type of context menu application command.
+    checks
+        A list of predicates that take a :class:`~discord.Interaction` parameter
+        to indicate whether the command callback should be executed. If an exception
+        is necessary to be thrown to signal failure, then one inherited from
+        :exc:`AppCommandError` should be used. If all the checks fail without
+        propagating an exception, :exc:`CheckFailure` is raised.
     """
 
     def __init__(
@@ -631,6 +745,8 @@ class ContextMenu:
         self._annotation = annotation
         self.module: Optional[str] = callback.__module__
         self._guild_ids = guild_ids
+        self.on_error: Optional[UnboundError] = None
+        self.checks: List[Check] = getattr(callback, '__discord_app_commands_checks__', [])
 
     @property
     def callback(self) -> ContextMenuCallback:
@@ -649,6 +765,8 @@ class ContextMenu:
         self._annotation = annotation
         self.module = callback.__module__
         self._guild_ids = None
+        self.on_error = None
+        self.checks = getattr(callback, '__discord_app_commands_checks__', [])
         return self
 
     def to_dict(self) -> Dict[str, Any]:
@@ -657,13 +775,83 @@ class ContextMenu:
             'type': self.type.value,
         }
 
+    async def _check_can_run(self, interaction: Interaction) -> bool:
+        predicates = self.checks
+        if not predicates:
+            return True
+
+        # Type checker does not understand negative narrowing cases like this function
+        return await async_all(f(interaction) for f in predicates)  # type: ignore
+
+    def _has_any_error_handlers(self) -> bool:
+        return self.on_error is not None
+
     async def _invoke(self, interaction: Interaction, arg: Any):
         try:
+            if not await self._check_can_run(interaction):
+                raise CheckFailure(f'The check functions for context menu {self.name!r} failed.')
+
             await self._callback(interaction, arg)
         except AppCommandError:
             raise
         except Exception as e:
             raise CommandInvokeError(self, e) from e
+
+    def error(self, coro: UnboundError) -> UnboundError:
+        """A decorator that registers a coroutine as a local error handler.
+
+        The local error handler is called whenever an exception is raised in the body
+        of the command or during handling of the command. The error handler must take
+        2 parameters, the interaction and the error.
+
+        The error passed will be derived from :exc:`AppCommandError`.
+
+        Parameters
+        -----------
+        coro: :ref:`coroutine <coroutine>`
+            The coroutine to register as the local error handler.
+
+        Raises
+        -------
+        TypeError
+            The coroutine passed is not actually a coroutine.
+        """
+
+        if not inspect.iscoroutinefunction(coro):
+            raise TypeError('The error handler must be a coroutine.')
+
+        self.on_error = coro
+        return coro
+
+    def add_check(self, func: Check, /) -> None:
+        """Adds a check to the command.
+
+        This is the non-decorator interface to :func:`check`.
+
+        Parameters
+        -----------
+        func
+            The function that will be used as a check.
+        """
+
+        self.checks.append(func)
+
+    def remove_check(self, func: Check, /) -> None:
+        """Removes a check from the command.
+
+        This function is idempotent and will not raise an exception
+        if the function is not in the command's checks.
+
+        Parameters
+        -----------
+        func
+            The function to remove from the checks.
+        """
+
+        try:
+            self.checks.remove(func)
+        except ValueError:
+            pass
 
 
 class Group:
@@ -686,7 +874,7 @@ class Group:
         The parent group. ``None`` if there isn't one.
     """
 
-    __discord_app_commands_group_children__: ClassVar[List[Union[Command, Group]]] = []
+    __discord_app_commands_group_children__: ClassVar[List[Union[Command[Any, ..., Any], Group]]] = []
     __discord_app_commands_skip_init_binding__: bool = False
     __discord_app_commands_group_name__: str = MISSING
     __discord_app_commands_group_description__: str = MISSING
@@ -694,9 +882,11 @@ class Group:
 
     def __init_subclass__(cls, *, name: str = MISSING, description: str = MISSING) -> None:
         if not cls.__discord_app_commands_group_children__:
-            cls.__discord_app_commands_group_children__ = children = [
+            children: List[Union[Command[Any, ..., Any], Group]] = [
                 member for member in cls.__dict__.values() if isinstance(member, (Group, Command)) and member.parent is None
             ]
+
+            cls.__discord_app_commands_group_children__ = children
 
             found = set()
             for child in children:
@@ -714,7 +904,7 @@ class Group:
 
         if description is MISSING:
             if cls.__doc__ is None:
-                cls.__discord_app_commands_group_description__ = '...'
+                cls.__discord_app_commands_group_description__ = '…'
             else:
                 cls.__discord_app_commands_group_description__ = _shorten(cls.__doc__)
         else:
@@ -755,8 +945,8 @@ class Group:
         self._children: Dict[str, Union[Command, Group]] = {}
 
         for child in self.__discord_app_commands_group_children__:
-            child = child._copy_with_binding(self) if not cls.__discord_app_commands_skip_init_binding__ else child
             child.parent = self
+            child = child._copy_with_binding(self) if not cls.__discord_app_commands_skip_init_binding__ else child
             self._children[child.name] = child
             if child._attr and not cls.__discord_app_commands_skip_init_binding__:
                 setattr(self, child._attr, child)
@@ -796,15 +986,29 @@ class Group:
         """Optional[:class:`Group`]: The parent of this group."""
         return self.parent
 
-    def _get_internal_command(self, name: str) -> Optional[Union[Command, Group]]:
+    def _get_internal_command(self, name: str) -> Optional[Union[Command[Any, ..., Any], Group]]:
         return self._children.get(name)
 
     @property
-    def commands(self) -> List[Union[Command, Group]]:
+    def commands(self) -> List[Union[Command[Any, ..., Any], Group]]:
         """List[Union[:class:`Command`, :class:`Group`]]: The commands that this group contains."""
         return list(self._children.values())
 
-    async def on_error(self, interaction: Interaction, command: Command, error: AppCommandError) -> None:
+    def walk_commands(self) -> Generator[Union[Command[Any, ..., Any], Group], None, None]:
+        """An iterator that recursively walks through all commands that this group contains.
+
+        Yields
+        ---------
+        Union[:class:`Command`, :class:`Group`]
+            The commands in this group.
+        """
+
+        for command in self._children.values():
+            yield command
+            if isinstance(command, Group):
+                yield from command.walk_commands()
+
+    async def on_error(self, interaction: Interaction, command: Command[Any, ..., Any], error: AppCommandError) -> None:
         """|coro|
 
         A callback that is called when a child's command raises an :exc:`AppCommandError`.
@@ -823,7 +1027,38 @@ class Group:
 
         pass
 
-    def add_command(self, command: Union[Command, Group], /, *, override: bool = False):
+    async def interaction_check(self, interaction: Interaction) -> bool:
+        """|coro|
+
+        A callback that is called when an interaction happens within the group
+        that checks whether a command inside the group should be executed.
+
+        This is useful to override if, for example, you want to ensure that the
+        interaction author is a given user.
+
+        The default implementation of this returns ``True``.
+
+        .. note::
+
+            If an exception occurs within the body then the check
+            is considered a failure and error handlers such as
+            :meth:`on_error` is called. See :exc:`AppCommandError`
+            for more information.
+
+        Parameters
+        -----------
+        interaction: :class:`~discord.Interaction`
+            The interaction that occurred.
+
+        Returns
+        ---------
+        :class:`bool`
+            Whether the view children's callbacks should be called.
+        """
+
+        return True
+
+    def add_command(self, command: Union[Command[Any, ..., Any], Group], /, *, override: bool = False) -> None:
         """Adds a command or group to this group's internal list of commands.
 
         Parameters
@@ -840,7 +1075,8 @@ class Group:
             The command or group is already registered. Note that the :attr:`CommandAlreadyRegistered.guild_id`
             attribute will always be ``None`` in this case.
         ValueError
-            There are too many commands already registered.
+            There are too many commands already registered or the group is too
+            deeply nested.
         TypeError
             The wrong command type was passed.
         """
@@ -848,14 +1084,23 @@ class Group:
         if not isinstance(command, (Command, Group)):
             raise TypeError(f'expected Command or Group not {command.__class__!r}')
 
+        if isinstance(command, Group) and self.parent is not None:
+            # In a tree like so:
+            # <group>
+            #   <self>
+            #     <group>
+            # this needs to be forbidden
+            raise ValueError('groups can only be nested at most one level')
+
         if not override and command.name in self._children:
             raise CommandAlreadyRegistered(command.name, guild_id=None)
 
         self._children[command.name] = command
+        command.parent = self
         if len(self._children) > 25:
             raise ValueError('maximum number of child commands exceeded')
 
-    def remove_command(self, name: str, /) -> Optional[Union[Command, Group]]:
+    def remove_command(self, name: str, /) -> Optional[Union[Command[Any, ..., Any], Group]]:
         """Removes a command or group from the internal list of commands.
 
         Parameters
@@ -872,7 +1117,7 @@ class Group:
 
         self._children.pop(name, None)
 
-    def get_command(self, name: str, /) -> Optional[Union[Command, Group]]:
+    def get_command(self, name: str, /) -> Optional[Union[Command[Any, ..., Any], Group]]:
         """Retrieves a command or group from its name.
 
         Parameters
@@ -913,7 +1158,7 @@ class Group:
 
             if description is MISSING:
                 if func.__doc__ is None:
-                    desc = '...'
+                    desc = '…'
                 else:
                     desc = _shorten(func.__doc__)
             else:
@@ -955,7 +1200,7 @@ def command(
 
         if description is MISSING:
             if func.__doc__ is None:
-                desc = '...'
+                desc = '…'
             else:
                 desc = _shorten(func.__doc__)
         else:
@@ -1046,7 +1291,7 @@ def describe(**parameters: str) -> Callable[[T], T]:
     return decorator
 
 
-def choices(**parameters: List[Choice]) -> Callable[[T], T]:
+def choices(**parameters: List[Choice[ChoiceT]]) -> Callable[[T], T]:
     r"""Instructs the given parameters by their name to use the given choices for their choices.
 
     Example:
@@ -1121,6 +1366,8 @@ def autocomplete(**parameters: AutocompleteCallback[GroupT, ChoiceT]) -> Callabl
     Autocomplete is only supported on types that have :class:`str`, :class:`int`, or :class:`float`
     values.
 
+    For more information, see the :meth:`Command.autocomplete` documentation.
+
     Example:
 
     .. code-block:: python3
@@ -1133,7 +1380,6 @@ def autocomplete(**parameters: AutocompleteCallback[GroupT, ChoiceT]) -> Callabl
             async def fruits_autocomplete(
                 interaction: discord.Interaction,
                 current: str,
-                namespace: app_commands.Namespace
             ) -> List[app_commands.Choice[str]]:
                 fruits = ['Banana', 'Pineapple', 'Apple', 'Watermelon', 'Melon', 'Cherry']
                 return [
@@ -1215,3 +1461,62 @@ def guilds(*guild_ids: Union[Snowflake, int]) -> Callable[[T], T]:
         return inner
 
     return decorator
+
+
+def check(predicate: Check) -> Callable[[T], T]:
+    r"""A decorator that adds a check to an application command.
+
+    These checks should be predicates that take in a single parameter taking
+    a :class:`~discord.Interaction`. If the check returns a ``False``\-like value then
+    during invocation a :exc:`CheckFailure` exception is raised and sent to
+    the appropriate error handlers.
+
+    These checks can be either a coroutine or not.
+
+    Examples
+    ---------
+
+    Creating a basic check to see if the command invoker is you.
+
+    .. code-block:: python3
+
+        def check_if_it_is_me(interaction: discord.Interaction) -> bool:
+            return interaction.user.id == 85309593344815104
+
+        @tree.command()
+        @app_commands.check(check_if_it_is_me)
+        async def only_for_me(interaction: discord.Interaction):
+            await interaction.response.send_message('I know you!', ephemeral=True)
+
+    Transforming common checks into its own decorator:
+
+    .. code-block:: python3
+
+        def is_me():
+            def predicate(interaction: discord.Interaction) -> bool:
+                return interaction.user.id == 85309593344815104
+            return app_commands.check(predicate)
+
+        @tree.command()
+        @is_me()
+        async def only_me(interaction: discord.Interaction):
+            await interaction.response.send_message('Only you!')
+
+    Parameters
+    -----------
+    predicate: Callable[[:class:`~discord.Interaction`], :class:`bool`]
+        The predicate to check if the command should be invoked.
+    """
+
+    def decorator(func: CheckInputParameter) -> CheckInputParameter:
+        if isinstance(func, (Command, ContextMenu)):
+            func.checks.append(predicate)
+        else:
+            if not hasattr(func, '__discord_app_commands_checks__'):
+                func.__discord_app_commands_checks__ = []
+
+            func.__discord_app_commands_checks__.append(predicate)
+
+        return func
+
+    return decorator  # type: ignore

@@ -110,6 +110,8 @@ Quick example:
     client = MyClient()
     client.run(TOKEN)
 
+With this change, constructor of :class:`Client` no longer accepts ``connector`` and ``loop`` parameters.
+
 In parallel with this change, changes were made to loading and unloading of commands extension extensions and cogs, 
 see :ref:`migrating_2_0_commands_extension_cog_async` for more information.
 
@@ -569,6 +571,7 @@ For convenience, :class:`Thread` has a set of properties and methods that return
 The following changes have been made:
 
 - :attr:`Message.channel` may now be a :class:`Thread`.
+- :attr:`Message.channel_mentions` list may now contain a :class:`Thread`.
 - :attr:`AuditLogEntry.target` may now be a :class:`Thread`.
 - :attr:`PartialMessage.channel` may now be a :class:`Thread`.
 - :attr:`Guild.get_channel` does not return :class:`Thread`\s.
@@ -842,6 +845,24 @@ The return type of the following methods has been changed to an :term:`asynchron
 The ``NoMoreItems`` exception was removed as calling :func:`anext` or :meth:`~object.__anext__` on an
 :term:`asynchronous iterator` will now raise :class:`StopAsyncIteration`.
 
+Removal of ``Embed.Empty``
+---------------------------
+
+Originally, embeds used a special sentinel to denote emptiness or remove an attribute from display. The ``Embed.Empty`` sentinel was made when Discord's embed design was in a nebulous state of flux. Since then, the embed design has stabilised and thus the sentinel is seen as legacy.
+
+Therefore, ``Embed.Empty`` has been removed in favour of ``None``.
+
+.. code-block:: python
+
+    # before
+    embed = discord.Embed(title='foo')
+    embed.title = discord.Embed.Empty
+
+    # after
+    embed = discord.Embed(title='foo')
+    embed.title = None
+
+
 Removal of ``InvalidArgument`` Exception
 -------------------------------------------
 
@@ -918,6 +939,7 @@ Parameters in the following methods are now all positional-only:
 - :meth:`Client.fetch_webhook`
 - :meth:`Client.fetch_widget`
 - :meth:`Message.add_reaction`
+- :meth:`Client.error`
 - :meth:`abc.Messageable.fetch_message`
 - :meth:`abc.GuildChannel.permissions_for`
 - :meth:`DMChannel.get_partial_message`
@@ -929,6 +951,9 @@ Parameters in the following methods are now all positional-only:
 The following parameters are now positional-only:
 
 - ``iterable`` in :meth:`utils.get`
+- ``event`` in :meth:`Client.dispatch`
+- ``event_method`` in :meth:`Client.on_error`
+- ``event`` in :meth:`Client.wait_for`
 
 The following are now keyword-only:
 
@@ -1138,6 +1163,8 @@ The following changes have been made:
 - :meth:`Message.edit` now merges object passed in ``allowed_mentions`` parameter with :attr:`Client.allowed_mentions`.
   If the parameter isn't provided, the defaults given by :attr:`Client.allowed_mentions` are used instead.
 
+- :meth:`Permissions.stage_moderator` now includes the :attr:`Permissions.manage_channels` permission and the :attr:`Permissions.request_to_speak` permission is no longer included.
+
 .. _migrating_2_0_commands:
 
 Command Extension Changes
@@ -1167,7 +1194,7 @@ Quick example of an extension setup function:
     def setup(bot):
         bot.add_cog(MyCog(bot))
 
-    #after
+    # after
     async def setup(bot):
         await bot.add_cog(MyCog(bot))
 
@@ -1175,10 +1202,10 @@ Quick example of loading an extension:
 
 .. code:: python
 
-    #before
+    # before
     bot.load_extension('my_extension')
 
-    #after using setup_hook
+    # after using setup_hook
     class MyBot(commands.Bot):
         async def setup_hook(self):
             await self.load_extension('my_extension')
@@ -1224,14 +1251,93 @@ define their type hints more accurately.
 Function Signature Changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Parameters in the following methods are now all positional-only:
+
+- :meth:`ext.commands.when_mentioned`
+- :meth:`ext.commands.Bot.on_command_error`
+- :meth:`ext.commands.Bot.check`
+- :meth:`ext.commands.Bot.check_once`
+- :meth:`ext.commands.Bot.is_owner`
+- :meth:`ext.commands.Bot.before_invoke`
+- :meth:`ext.commands.Bot.after_invoke`
+- :meth:`ext.commands.Bot.get_prefix`
+- :meth:`ext.commands.Bot.invoke`
+- :meth:`ext.commands.Bot.process_commands`
+- :meth:`ext.commands.Bot.on_message`
+- :meth:`ext.commands.Command.dispatch_error`
+- :meth:`ext.commands.Command.transform`
+- :meth:`ext.commands.Command.call_before_hooks`
+- :meth:`ext.commands.Command.call_after_hooks`
+- :meth:`ext.commands.Command.prepare`
+- :meth:`ext.commands.Command.is_on_cooldown`
+- :meth:`ext.commands.Command.reset_cooldown`
+- :meth:`ext.commands.Command.get_cooldown_retry_after`
+- :meth:`ext.commands.Command.invoke`
+- :meth:`ext.commands.Command.error`
+- :meth:`ext.commands.Command.before_invoke`
+- :meth:`ext.commands.Command.after_invoke`
+- :meth:`ext.commands.Command.can_run`
+- :meth:`ext.commands.Group.invoke`
+- :meth:`ext.commands.check`
+- :meth:`ext.commands.has_role`
+- :meth:`ext.commands.bot_has_role`
+- :meth:`ext.commands.before_invoke`
+- :meth:`ext.commands.after_invoke`
+- :meth:`ext.commands.HelpCommand.call_before_hooks`
+- :meth:`ext.commands.HelpCommand.call_after_hooks`
+- :meth:`ext.commands.HelpCommand.can_run`
+- :meth:`ext.commands.HelpCommand.get_command_signature`
+- :meth:`ext.commands.HelpCommand.remove_mentions`
+- :meth:`ext.commands.HelpCommand.command_not_found`
+- :meth:`ext.commands.HelpCommand.subcommand_not_found`
+- :meth:`ext.commands.HelpCommand.get_max_size`
+- :meth:`ext.commands.HelpCommand.send_error_message`
+- :meth:`ext.commands.HelpCommand.on_help_command_error`
+- :meth:`ext.commands.HelpCommand.send_bot_help`
+- :meth:`ext.commands.HelpCommand.send_cog_help`
+- :meth:`ext.commands.HelpCommand.send_group_help`
+- :meth:`ext.commands.HelpCommand.send_command_help`
+- :meth:`ext.commands.HelpCommand.prepare_help_command`
+- :meth:`ext.commands.DefaultHelpCommand.shorten_text`
+- :meth:`ext.commands.DefaultHelpCommand.add_command_formatting`
+- :meth:`ext.commands.DefaultHelpCommand.prepare_help_command`
+- :meth:`ext.commands.DefaultHelpCommand.send_bot_help`
+- :meth:`ext.commands.DefaultHelpCommand.send_command_help`
+- :meth:`ext.commands.DefaultHelpCommand.send_group_help`
+- :meth:`ext.commands.DefaultHelpCommand.send_cog_help`
+- :meth:`ext.commands.MinimalHelpCommand.get_command_signature`
+- :meth:`ext.commands.MinimalHelpCommand.add_bot_commands_formatting`
+- :meth:`ext.commands.MinimalHelpCommand.add_subcommand_formatting`
+- :meth:`ext.commands.MinimalHelpCommand.add_aliases_formatting`
+- :meth:`ext.commands.MinimalHelpCommand.add_command_formatting`
+- :meth:`ext.commands.MinimalHelpCommand.prepare_help_command`
+- :meth:`ext.commands.MinimalHelpCommand.send_bot_help`
+- :meth:`ext.commands.MinimalHelpCommand.send_cog_help`
+- :meth:`ext.commands.MinimalHelpCommand.send_group_help`
+- :meth:`ext.commands.MinimalHelpCommand.send_command_help`
+
 The following parameters are now positional-only:
 
+- ``event_name`` in :meth:`ext.commands.Bot.dispatch`
+- ``func`` in :meth:`ext.commands.Bot.check`
 - ``func`` in :meth:`ext.commands.Bot.add_check`
 - ``func`` in :meth:`ext.commands.Bot.remove_check`
+- ``func`` in :meth:`ext.commands.Bot.check_once`
+- ``ctx`` in :meth:`ext.commands.Bot.can_run`
+- ``func`` in :meth:`ext.commands.Bot.add_listener`
+- ``func`` in :meth:`ext.commands.Bot.remove_listener`
+- ``message`` in :meth:`ext.commands.Bot.get_context`
 - ``func`` in :meth:`ext.commands.Command.add_check`
 - ``func`` in :meth:`ext.commands.Command.remove_check`
+- ``context`` in :meth:`ext.commands.Command.__call__`
+- ``ctx`` in :meth:`ext.commands.Command.reinvoke`
+- ``ctx`` in :meth:`ext.commands.Group.reinvoke`
+- ``context`` in :meth:`ext.commands.HelpCommand.__call__`
+- ``commands`` in :meth:`ext.commands.HelpCommand.filter_commands`
+- ``ctx`` in :meth:`ext.commands.HelpCommand.command_callback`
 - ``func`` in :meth:`ext.commands.HelpCommand.add_check`
 - ``func`` in :meth:`ext.commands.HelpCommand.remove_check`
+- ``commands`` in :meth:`ext.commands.DefaultHelpCommand.add_indented_commands`
 - ``cog`` in :meth:`ext.commands.Bot.add_cog`
 - ``name`` in :meth:`ext.commands.Bot.get_cog`
 - ``name`` in :meth:`ext.commands.Bot.remove_cog`

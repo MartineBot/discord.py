@@ -44,11 +44,11 @@ from typing import (
     Union,
 )
 
-from .errors import TransformerError
+from .errors import AppCommandError, TransformerError
 from .models import AppCommandChannel, AppCommandThread, Choice
 from ..channel import StageChannel, StoreChannel, VoiceChannel, TextChannel, CategoryChannel
 from ..enums import AppCommandOptionType, ChannelType
-from ..utils import MISSING
+from ..utils import MISSING, maybe_coroutine
 from ..user import User
 from ..role import Role
 from ..member import Member
@@ -95,7 +95,7 @@ class CommandParameter:
     description: str = MISSING
     required: bool = MISSING
     default: Any = MISSING
-    choices: List[Choice] = MISSING
+    choices: List[Choice[Union[str, int, float]]] = MISSING
     type: AppCommandOptionType = MISSING
     channel_types: List[ChannelType] = MISSING
     min_value: Optional[Union[int, float]] = None
@@ -124,6 +124,9 @@ class CommandParameter:
 
         return base
 
+    def is_choice_annotation(self) -> bool:
+        return getattr(self._annotation, '__discord_app_commands_is_choice__', False)
+
     async def transform(self, interaction: Interaction, value: Any) -> Any:
         if hasattr(self._annotation, '__discord_app_commands_transformer__'):
             # This one needs special handling for type safety reasons
@@ -133,7 +136,14 @@ class CommandParameter:
                     raise TransformerError(value, self.type, self._annotation)
                 return choice
 
-            return await self._annotation.transform(interaction, value)
+            try:
+                # ParamSpec doesn't understand that transform is a callable since it's unbound
+                return await maybe_coroutine(self._annotation.transform, interaction, value)  # type: ignore
+            except AppCommandError:
+                raise
+            except Exception as e:
+                raise TransformerError(value, self.type, self._annotation) from e
+
         return value
 
 
@@ -215,7 +225,7 @@ class Transformer:
 
     @classmethod
     async def transform(cls, interaction: Interaction, value: Any) -> Any:
-        """|coro|
+        """|maybecoro|
 
         Transforms the converted option value into another value.
 
@@ -267,9 +277,6 @@ def _make_range_transformer(
 
 
 def _make_literal_transformer(values: Tuple[Any, ...]) -> Type[Transformer]:
-    if len(values) < 2:
-        raise TypeError(f'typing.Literal requires at least two values.')
-
     first = type(values[0])
     if first is int:
         opt_type = AppCommandOptionType.integer
@@ -549,7 +556,7 @@ ALLOWED_DEFAULTS: Dict[AppCommandOptionType, Tuple[Type[Any], ...]] = {
 def get_supported_annotation(
     annotation: Any,
     *,
-    _none=NoneType,
+    _none: type = NoneType,
     _mapping: Dict[Any, Type[Transformer]] = BUILT_IN_TRANSFORMERS,
 ) -> Tuple[Any, Any]:
     """Returns an appropriate, yet supported, annotation along with an optional default value.

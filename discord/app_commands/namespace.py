@@ -25,7 +25,6 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, NamedTuple, Tuple
-from ..interactions import Interaction
 from ..member import Member
 from ..object import Object
 from ..role import Role
@@ -35,6 +34,7 @@ from ..enums import AppCommandOptionType
 from .models import AppCommandChannel, AppCommandThread
 
 if TYPE_CHECKING:
+    from ..interactions import Interaction
     from ..types.interactions import ResolvedData, ApplicationCommandInteractionDataOption
 
 __all__ = ('Namespace',)
@@ -68,7 +68,8 @@ class Namespace:
 
     This class is deliberately simple and just holds the option name and resolved value as a simple
     key-pair mapping. These attributes can be accessed using dot notation. For example, an option
-    with the name of ``example`` can be accessed using ``ns.example``.
+    with the name of ``example`` can be accessed using ``ns.example``. If an attribute is not found,
+    then ``None`` is returned rather than an attribute error.
 
     .. versionadded:: 2.0
 
@@ -80,6 +81,13 @@ class Namespace:
         .. describe:: x != y
 
             Checks if two namespaces are not equal.
+        .. describe:: x[key]
+
+            Returns an attribute if it is found, otherwise raises
+            a :exc:`KeyError`.
+        .. describe:: key in x
+
+            Checks if the attribute is in the namespace.
 
     This namespace object converts resolved objects into their appropriate form depending on their
     type. Consult the table below for conversion information.
@@ -105,6 +113,14 @@ class Namespace:
     +-------------------------------------------+-------------------------------------------------------------------------------+
     | :attr:`.AppCommandOptionType.attachment`  | :class:`~discord.Attachment`                                                  |
     +-------------------------------------------+-------------------------------------------------------------------------------+
+
+    .. note::
+
+        In autocomplete interactions, the namespace might not be validated or filled in. Discord does not
+        send the resolved data as well, so this means that certain fields end up just as IDs rather than
+        the resolved data. In these cases, a :class:`discord.Object` is returned instead.
+
+        This is a Discord limitation.
     """
 
     def __init__(
@@ -139,7 +155,7 @@ class Namespace:
                     # servers will still have them so this needs to be handled.
                     key = ResolveKey(id=snowflake, type=opt_type)
 
-                value = completed.get(key)
+                value = completed.get(key) or Object(id=int(snowflake))
                 self.__dict__[name] = value
 
     @classmethod
@@ -212,6 +228,15 @@ class Namespace:
         if isinstance(self, Namespace) and isinstance(other, Namespace):
             return self.__dict__ == other.__dict__
         return NotImplemented
+
+    def __getitem__(self, key: str) -> Any:
+        return self.__dict__[key]
+
+    def __contains__(self, key: str) -> Any:
+        return key in self.__dict__
+
+    def __getattr__(self, attr: str) -> Any:
+        return None
 
     def _update_with_defaults(self, defaults: Iterable[Tuple[str, Any]]) -> None:
         for key, value in defaults:

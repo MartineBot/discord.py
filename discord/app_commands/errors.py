@@ -34,6 +34,7 @@ __all__ = (
     'AppCommandError',
     'CommandInvokeError',
     'TransformerError',
+    'CheckFailure',
     'CommandAlreadyRegistered',
     'CommandSignatureMismatch',
     'CommandNotFound',
@@ -79,9 +80,9 @@ class CommandInvokeError(AppCommandError):
         The command that failed.
     """
 
-    def __init__(self, command: Union[Command, ContextMenu], e: Exception) -> None:
+    def __init__(self, command: Union[Command[Any, ..., Any], ContextMenu], e: Exception) -> None:
         self.original: Exception = e
-        self.command: Union[Command, ContextMenu] = command
+        self.command: Union[Command[Any, ..., Any], ContextMenu] = command
         super().__init__(f'Command {command.name!r} raised an exception: {e.__class__.__name__}: {e}')
 
 
@@ -91,10 +92,11 @@ class TransformerError(AppCommandError):
 
     This inherits from :exc:`~discord.app_commands.AppCommandError`.
 
-    .. note::
-
-        If the transformer raises a custom :exc:`AppCommandError` then it will
-        be propagated rather than wrapped into this exception.
+    If an exception occurs while converting that does not subclass
+    :exc:`AppCommandError` then the exception is wrapped into this exception.
+    The original exception can be retrieved using the ``__cause__`` attribute.
+    Otherwise if the exception derives from :exc:`AppCommandError` then it will
+    be propagated as-is.
 
     .. versionadded:: 2.0
 
@@ -126,6 +128,17 @@ class TransformerError(AppCommandError):
                 result_type = result_type.__name__
 
         super().__init__(f'Failed to convert {value} to {result_type!s}')
+
+
+class CheckFailure(AppCommandError):
+    """An exception raised when check predicates in a command have failed.
+
+    This inherits from :exc:`~discord.app_commands.AppCommandError`.
+
+    .. versionadded:: 2.0
+    """
+
+    pass
 
 
 class CommandAlreadyRegistered(AppCommandError):
@@ -191,8 +204,8 @@ class CommandSignatureMismatch(AppCommandError):
         The command that had the signature mismatch.
     """
 
-    def __init__(self, command: Union[Command, ContextMenu, Group]):
-        self.command: Union[Command, ContextMenu, Group] = command
+    def __init__(self, command: Union[Command[Any, ..., Any], ContextMenu, Group]):
+        self.command: Union[Command[Any, ..., Any], ContextMenu, Group] = command
         msg = (
             f'The signature for command {command.name!r} is different from the one provided by Discord. '
             'This can happen because either your code is out of date or you have not synced the '

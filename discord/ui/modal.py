@@ -38,6 +38,8 @@ from .item import Item
 from .view import View
 
 if TYPE_CHECKING:
+    from typing_extensions import Self
+
     from ..interactions import Interaction
     from ..types.interactions import ModalSubmitComponentInteractionData as ModalSubmitComponentInteractionDataPayload
 
@@ -101,7 +103,7 @@ class Modal(View):
         title: str
 
     __discord_ui_modal__ = True
-    __modal_children_items__: ClassVar[Dict[str, Item]] = {}
+    __modal_children_items__: ClassVar[Dict[str, Item[Self]]] = {}
 
     def __init_subclass__(cls, *, title: str = MISSING) -> None:
         if title is not MISSING:
@@ -139,7 +141,7 @@ class Modal(View):
 
         super().__init__(timeout=timeout)
 
-    async def on_submit(self, interaction: Interaction):
+    async def on_submit(self, interaction: Interaction) -> None:
         """|coro|
 
         Called when the modal is submitted.
@@ -169,16 +171,16 @@ class Modal(View):
         print(f'Ignoring exception in modal {self}:', file=sys.stderr)
         traceback.print_exception(error.__class__, error, error.__traceback__, file=sys.stderr)
 
-    def refresh(self, components: Sequence[ModalSubmitComponentInteractionDataPayload]):
+    def _refresh(self, components: Sequence[ModalSubmitComponentInteractionDataPayload]) -> None:
         for component in components:
             if component['type'] == 1:
-                self.refresh(component['components'])
+                self._refresh(component['components'])
             else:
                 item = find(lambda i: i.custom_id == component['custom_id'], self.children)  # type: ignore
                 if item is None:
                     _log.debug("Modal interaction referencing unknown item custom_id %s. Discarding", component['custom_id'])
                     continue
-                item.refresh_state(component)  # type: ignore
+                item._refresh_state(component)  # type: ignore
 
     async def _scheduled_task(self, interaction: Interaction):
         try:
@@ -190,8 +192,6 @@ class Modal(View):
                 return
 
             await self.on_submit(interaction)
-            if not interaction.response._responded:
-                await interaction.response.defer()
         except Exception as e:
             return await self.on_error(e, interaction)
         else:

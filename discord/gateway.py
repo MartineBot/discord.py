@@ -34,7 +34,7 @@ import threading
 import traceback
 import zlib
 
-from typing import Any, Callable, Coroutine, Deque, Dict, List, TYPE_CHECKING, NamedTuple, Optional, TypeVar, Type
+from typing import Any, Callable, Coroutine, Deque, Dict, List, TYPE_CHECKING, NamedTuple, Optional, TypeVar
 
 import aiohttp
 
@@ -437,7 +437,6 @@ class DiscordWebSocket:
                 },
                 'compress': False,
                 'large_threshold': 250,
-                'v': 3,
             },
         }
 
@@ -547,8 +546,6 @@ class DiscordWebSocket:
             self._trace = trace = data.get('_trace', [])
             self.sequence = msg['s']
             self.session_id = data['session_id']
-            # pass back shard ID to ready handler
-            data['__shard_id__'] = self.shard_id
             _log.info(
                 'Shard ID %s has connected to Gateway: %s (Session ID: %s).',
                 self.shard_id,
@@ -829,7 +826,7 @@ class DiscordVoiceWebSocket:
         self._close_code: Optional[int] = None
         self.secret_key: Optional[str] = None
         if hook:
-            self._hook = hook  # type: ignore - type-checker doesn't like overriding methods
+            self._hook = hook  # type: ignore # type-checker doesn't like overriding methods
 
     async def _hook(self, *args: Any) -> None:
         pass

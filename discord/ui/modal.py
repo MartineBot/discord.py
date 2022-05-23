@@ -28,7 +28,6 @@ import asyncio
 import logging
 import os
 import sys
-import time
 import traceback
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, ClassVar, List
@@ -78,23 +77,19 @@ class Modal(View):
     Parameters
     -----------
     title: :class:`str`
-        The title of the modal.
+        The title of the modal. Can only be up to 45 characters.
     timeout: Optional[:class:`float`]
         Timeout in seconds from last interaction with the UI before no longer accepting input.
         If ``None`` then there is no timeout.
     custom_id: :class:`str`
         The ID of the modal that gets received during an interaction.
         If not given then one is generated for you.
+        Can only be up to 100 characters.
 
     Attributes
     ------------
-    timeout: Optional[:class:`float`]
-        Timeout from last interaction with the UI before no longer accepting input.
-        If ``None`` then there is no timeout.
     title: :class:`str`
         The title of the modal.
-    children: List[:class:`Item`]
-        The list of children attached to this view.
     custom_id: :class:`str`
         The ID of the modal that gets received during an interaction.
     """
@@ -153,7 +148,7 @@ class Modal(View):
         """
         pass
 
-    async def on_error(self, error: Exception, interaction: Interaction) -> None:
+    async def on_error(self, interaction: Interaction, error: Exception) -> None:
         """|coro|
 
         A callback that is called when :meth:`on_submit`
@@ -163,10 +158,10 @@ class Modal(View):
 
         Parameters
         -----------
-        error: :class:`Exception`
-            The exception that was raised.
         interaction: :class:`~discord.Interaction`
             The interaction that led to the failure.
+        error: :class:`Exception`
+            The exception that was raised.
         """
         print(f'Ignoring exception in modal {self}:', file=sys.stderr)
         traceback.print_exception(error.__class__, error, error.__traceback__, file=sys.stderr)
@@ -176,7 +171,7 @@ class Modal(View):
             if component['type'] == 1:
                 self._refresh(component['components'])
             else:
-                item = find(lambda i: i.custom_id == component['custom_id'], self.children)  # type: ignore
+                item = find(lambda i: i.custom_id == component['custom_id'], self._children)  # type: ignore
                 if item is None:
                     _log.debug("Modal interaction referencing unknown item custom_id %s. Discarding", component['custom_id'])
                     continue
@@ -184,16 +179,14 @@ class Modal(View):
 
     async def _scheduled_task(self, interaction: Interaction):
         try:
-            if self.timeout:
-                self.__timeout_expiry = time.monotonic() + self.timeout
-
+            self._refresh_timeout()
             allow = await self.interaction_check(interaction)
             if not allow:
                 return
 
             await self.on_submit(interaction)
         except Exception as e:
-            return await self.on_error(e, interaction)
+            return await self.on_error(interaction, e)
         else:
             # No error, so assume this will always happen
             # In the future, maybe this will require checking if we set an error response.

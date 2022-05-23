@@ -152,6 +152,13 @@ class Permissions(BaseFlags):
         return cls(0b11111111111111111111111111111111111111111)
 
     @classmethod
+    def _timeout_mask(cls) -> int:
+        p = cls.all()
+        p.view_channel = False
+        p.read_message_history = False
+        return ~p.value
+
+    @classmethod
     def all_channel(cls) -> Self:
         """A :class:`Permissions` with all channel-specific permissions set to
         ``True`` and the guild-specific ones set to ``False``. The guild-specific
@@ -168,7 +175,7 @@ class Permissions(BaseFlags):
         - :attr:`administrator`
 
         .. versionchanged:: 1.7
-           Added :attr:`stream`, :attr:`priority_speaker` and :attr:`use_slash_commands` permissions.
+           Added :attr:`stream`, :attr:`priority_speaker` and :attr:`use_application_commands` permissions.
 
         .. versionchanged:: 2.0
            Added :attr:`create_public_threads`, :attr:`create_private_threads`, :attr:`manage_threads`,
@@ -206,7 +213,7 @@ class Permissions(BaseFlags):
 
         .. versionchanged:: 1.7
            Permission :attr:`read_messages` is no longer part of the text permissions.
-           Added :attr:`use_slash_commands` permission.
+           Added :attr:`use_application_commands` permission.
 
         .. versionchanged:: 2.0
            Added :attr:`create_public_threads`, :attr:`create_private_threads`, :attr:`manage_threads`,
@@ -244,6 +251,27 @@ class Permissions(BaseFlags):
             Added :attr:`manage_channels` permission and removed :attr:`request_to_speak` permission.
         """
         return cls(0b1010000000000000000010000)
+
+    @classmethod
+    def elevated(cls) -> Self:
+        """A factory method that creates a :class:`Permissions` with all permissions
+        that require 2FA set to ``True``. These permissions are currently:
+
+        - :attr:`kick_members`
+        - :attr:`ban_members`
+        - :attr:`administrator`
+        - :attr:`manage_channels`
+        - :attr:`manage_guild`
+        - :attr:`manage_messages`
+        - :attr:`manage_roles`
+        - :attr:`manage_webhooks`
+        - :attr:`manage_emojis_and_stickers`
+        - :attr:`manage_threads`
+        - :attr:`moderate_members`
+
+        .. versionadded:: 2.0
+        """
+        return cls(0b10000010001110000000000000010000000111110)
 
     @classmethod
     def advanced(cls) -> Self:
@@ -489,7 +517,7 @@ class Permissions(BaseFlags):
         return 1 << 30
 
     @flag_value
-    def use_slash_commands(self) -> int:
+    def use_application_commands(self) -> int:
         """:class:`bool`: Returns ``True`` if a user can use slash commands.
 
         .. versionadded:: 1.7
@@ -679,7 +707,7 @@ class PermissionOverwrite:
         manage_webhooks: Optional[bool]
         manage_emojis: Optional[bool]
         manage_emojis_and_stickers: Optional[bool]
-        use_slash_commands: Optional[bool]
+        use_application_commands: Optional[bool]
         request_to_speak: Optional[bool]
         manage_events: Optional[bool]
         manage_threads: Optional[bool]
@@ -688,6 +716,8 @@ class PermissionOverwrite:
         send_messages_in_threads: Optional[bool]
         external_stickers: Optional[bool]
         use_external_stickers: Optional[bool]
+        use_embedded_activities: Optional[bool]
+        moderate_members: Optional[bool]
 
     def __init__(self, **kwargs: Optional[bool]):
         self._values: Dict[str, Optional[bool]] = {}

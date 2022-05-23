@@ -117,6 +117,7 @@ class Embed:
     title: Optional[:class:`str`]
         The title of the embed.
         This can be set during initialisation.
+        Can only be up to 256 characters.
     type: :class:`str`
         The type of embed. Usually "rich".
         This can be set during initialisation.
@@ -125,6 +126,7 @@ class Embed:
     description: Optional[:class:`str`]
         The description of the embed.
         This can be set during initialisation.
+        Can only be up to 4096 characters.
     url: Optional[:class:`str`]
         The URL of the embed.
         This can be set during initialisation.
@@ -335,7 +337,7 @@ class Embed:
         Parameters
         -----------
         text: :class:`str`
-            The footer text.
+            The footer text. Can only be up to 2048 characters.
         icon_url: :class:`str`
             The URL of the footer icon. Only HTTP(S) is supported.
         """
@@ -493,7 +495,7 @@ class Embed:
         Parameters
         -----------
         name: :class:`str`
-            The name of the author.
+            The name of the author. Can only be up to 256 characters.
         url: :class:`str`
             The URL for the author.
         icon_url: :class:`str`
@@ -542,14 +544,14 @@ class Embed:
         """Adds a field to the embed object.
 
         This function returns the class instance to allow for fluent-style
-        chaining.
+        chaining. Can only be up to 25 fields.
 
         Parameters
         -----------
         name: :class:`str`
-            The name of the field.
+            The name of the field. Can only be up to 256 characters.
         value: :class:`str`
-            The value of the field.
+            The value of the field. Can only be up to 1024 characters.
         inline: :class:`bool`
             Whether the field should be displayed inline.
         """
@@ -571,7 +573,7 @@ class Embed:
         """Inserts a field before a specified index to the embed.
 
         This function returns the class instance to allow for fluent-style
-        chaining.
+        chaining. Can only be up to 25 fields.
 
         .. versionadded:: 1.2
 
@@ -580,9 +582,9 @@ class Embed:
         index: :class:`int`
             The index of where to insert the field.
         name: :class:`str`
-            The name of the field.
+            The name of the field. Can only be up to 256 characters.
         value: :class:`str`
-            The value of the field.
+            The value of the field. Can only be up to 1024 characters.
         inline: :class:`bool`
             Whether the field should be displayed inline.
         """
@@ -600,23 +602,38 @@ class Embed:
 
         return self
 
-    def clear_fields(self) -> None:
-        """Removes all fields from this embed."""
+    def clear_fields(self) -> Self:
+        """Removes all fields from this embed.
+
+        This function returns the class instance to allow for fluent-style
+        chaining.
+
+        .. versionchanged:: 2.0
+            This function now returns the class instance.
+        """
         try:
             self._fields.clear()
         except AttributeError:
             self._fields = []
 
-    def remove_field(self, index: int) -> None:
+        return self
+
+    def remove_field(self, index: int) -> Self:
         """Removes a field at a specified index.
 
         If the index is invalid or out of bounds then the error is
         silently swallowed.
 
+        This function returns the class instance to allow for fluent-style
+        chaining.
+
         .. note::
 
             When deleting a field by index, the index of the other fields
             shift to fill the gap just like a regular list.
+
+        .. versionchanged:: 2.0
+            This function now returns the class instance.
 
         Parameters
         -----------
@@ -628,10 +645,12 @@ class Embed:
         except (AttributeError, IndexError):
             pass
 
+        return self
+
     def set_field_at(self, index: int, *, name: Any, value: Any, inline: bool = True) -> Self:
         """Modifies a field to the embed object.
 
-        The index must point to a valid pre-existing field.
+        The index must point to a valid pre-existing field. Can only be up to 25 fields.
 
         This function returns the class instance to allow for fluent-style
         chaining.
@@ -641,9 +660,9 @@ class Embed:
         index: :class:`int`
             The index of the field to modify.
         name: :class:`str`
-            The name of the field.
+            The name of the field. Can only be up to 256 characters.
         value: :class:`str`
-            The value of the field.
+            The value of the field. Can only be up to 1024 characters.
         inline: :class:`bool`
             Whether the field should be displayed inline.
 
@@ -709,4 +728,4 @@ class Embed:
         if self.title:
             result['title'] = self.title
 
-        return result  # type: ignore - This payload is equivalent to the EmbedData type
+        return result  # type: ignore # This payload is equivalent to the EmbedData type

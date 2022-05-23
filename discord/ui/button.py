@@ -24,7 +24,7 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import Callable, Optional, TYPE_CHECKING, Tuple, TypeVar, Union
+from typing import Callable, Literal, Optional, TYPE_CHECKING, Tuple, TypeVar, Union
 import inspect
 import os
 
@@ -105,6 +105,9 @@ class Button(Item[V]):
         if url is None and custom_id is None:
             custom_id = os.urandom(16).hex()
 
+        if custom_id is not None and not isinstance(custom_id, str):
+            raise TypeError(f'expected custom_id to be str not {custom_id.__class__!r}')
+
         if url is not None:
             style = ButtonStyle.link
 
@@ -117,7 +120,6 @@ class Button(Item[V]):
                 raise TypeError(f'expected emoji to be str, Emoji, or PartialEmoji not {emoji.__class__}')
 
         self._underlying = ButtonComponent._raw_construct(
-            type=ComponentType.button,
             custom_id=custom_id,
             url=url,
             disabled=disabled,
@@ -125,7 +127,7 @@ class Button(Item[V]):
             style=style,
             emoji=emoji,
         )
-        self.row: Optional[int] = row
+        self.row = row
 
     @property
     def style(self) -> ButtonStyle:
@@ -210,7 +212,7 @@ class Button(Item[V]):
         )
 
     @property
-    def type(self) -> ComponentType:
+    def type(self) -> Literal[ComponentType.button]:
         return self._underlying.type
 
     def to_component_dict(self) -> ButtonComponentPayload:

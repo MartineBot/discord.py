@@ -35,7 +35,7 @@ from .view import StringView
 from ._types import BotT
 
 if TYPE_CHECKING:
-    from typing_extensions import Self, ParamSpec
+    from typing_extensions import Self, ParamSpec, TypeGuard
 
     from discord.abc import MessageableChannel
     from discord.guild import Guild
@@ -75,6 +75,10 @@ if TYPE_CHECKING:
     P = ParamSpec('P')
 else:
     P = TypeVar('P')
+
+
+def is_cog(obj: Any) -> TypeGuard[Cog]:
+    return hasattr(obj, '__cog_commands__')
 
 
 class DeferTyping:
@@ -279,7 +283,7 @@ class Context(discord.abc.Messageable, Generic[BotT]):
             message = interaction.message
 
         prefix = '/' if data.get('type', 1) == 1 else '\u200b'  # Mock the prefix
-        return cls(
+        ctx = cls(
             message=message,
             bot=bot,
             view=StringView(''),
@@ -290,6 +294,8 @@ class Context(discord.abc.Messageable, Generic[BotT]):
             invoked_with=command.name,
             command=command,  # type: ignore # this will be a hybrid command, technically
         )
+        interaction._baton = ctx
+        return ctx
 
     async def invoke(self, command: Command[CogT, P, T], /, *args: P.args, **kwargs: P.kwargs) -> T:
         r"""|coro|
@@ -524,7 +530,7 @@ class Context(discord.abc.Messageable, Generic[BotT]):
         await cmd.prepare_help_command(self, entity.qualified_name)
 
         try:
-            if hasattr(entity, '__cog_commands__'):
+            if is_cog(entity):
                 injected = wrap_callback(cmd.send_cog_help)
                 return await injected(entity)
             elif isinstance(entity, Group):

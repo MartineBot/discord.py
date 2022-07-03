@@ -125,7 +125,7 @@ async def _purge_helper(
     before: Optional[SnowflakeTime] = None,
     after: Optional[SnowflakeTime] = None,
     around: Optional[SnowflakeTime] = None,
-    oldest_first: Optional[bool] = False,
+    oldest_first: Optional[bool] = None,
     bulk: bool = True,
     reason: Optional[str] = None,
 ) -> List[Message]:
@@ -1839,11 +1839,11 @@ class Connectable(Protocol):
         self_mute: :class:`bool`
             Indicates if the client should be self-muted.
 
-            .. versionadded: 2.0
+            .. versionadded:: 2.0
         self_deaf: :class:`bool`
             Indicates if the client should be self-deafened.
 
-            .. versionadded: 2.0
+            .. versionadded:: 2.0
 
         Raises
         -------

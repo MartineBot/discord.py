@@ -264,7 +264,7 @@ def handle_message_parameters(
     return MultipartParameters(payload=payload, multipart=multipart, files=files)
 
 
-INTERNAL_API_VERSION: int = 9
+INTERNAL_API_VERSION: int = 10
 
 
 def _set_api_version(value: int):

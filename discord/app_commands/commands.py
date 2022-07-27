@@ -1994,6 +1994,8 @@ def check(predicate: Check) -> Callable[[T], T]:
 
         return func
 
+    decorator.predicate = predicate
+
     return decorator  # type: ignore
 
 

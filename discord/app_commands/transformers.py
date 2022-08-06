@@ -46,10 +46,11 @@ from typing import (
 
 from .errors import AppCommandError, TransformerError
 from .models import AppCommandChannel, AppCommandThread, Choice
+from .translator import locale_str, Translator, TranslationContext
 from ..channel import StageChannel, VoiceChannel, TextChannel, CategoryChannel
 from ..abc import GuildChannel
 from ..threads import Thread
-from ..enums import Enum as InternalEnum, AppCommandOptionType, ChannelType
+from ..enums import Enum as InternalEnum, AppCommandOptionType, ChannelType, Locale
 from ..utils import MISSING, maybe_coroutine
 from ..user import User
 from ..role import Role
@@ -73,7 +74,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class CommandParameter:
-    """Represents a application command parameter.
+    """Represents an application command parameter.
 
     Attributes
     -----------
@@ -95,8 +96,10 @@ class CommandParameter:
         The maximum supported value for this parameter.
     """
 
+    # The name of the parameter is *always* the parameter name in the code
+    # Therefore, it can't be Union[str, locale_str]
     name: str = MISSING
-    description: str = MISSING
+    description: Union[str, locale_str] = MISSING
     required: bool = MISSING
     default: Any = MISSING
     choices: List[Choice[Union[str, int, float]]] = MISSING
@@ -105,8 +108,48 @@ class CommandParameter:
     min_value: Optional[Union[int, float]] = None
     max_value: Optional[Union[int, float]] = None
     autocomplete: Optional[Callable[..., Coroutine[Any, Any, Any]]] = None
-    _rename: str = MISSING
+    _rename: Union[str, locale_str] = MISSING
     _annotation: Any = MISSING
+
+    async def get_translated_payload(self, translator: Translator) -> Dict[str, Any]:
+        base = self.to_dict()
+
+        needs_name_translations = isinstance(self._rename, locale_str)
+        needs_description_translations = isinstance(self.description, locale_str)
+        name_localizations: Dict[str, str] = {}
+        description_localizations: Dict[str, str] = {}
+        for locale in Locale:
+            if needs_name_translations:
+                translation = await translator._checked_translate(
+                    self._rename,  # type: ignore  # This will always be locale_str
+                    locale,
+                    TranslationContext.parameter_name,
+                )
+                if translation is not None:
+                    name_localizations[locale.value] = translation
+
+            if needs_description_translations:
+                translation = await translator._checked_translate(
+                    self.description,  # type: ignore  # This will always be locale_str
+                    locale,
+                    TranslationContext.parameter_description,
+                )
+                if translation is not None:
+                    description_localizations[locale.value] = translation
+
+        if isinstance(self.description, locale_str):
+            base['description'] = self.description.message
+
+        if self.choices:
+            base['choices'] = [await choice.get_translated_payload(translator) for choice in self.choices]
+
+        if name_localizations:
+            base['name_localizations'] = name_localizations
+
+        if description_localizations:
+            base['description_localizations'] = description_localizations
+
+        return base
 
     def to_dict(self) -> Dict[str, Any]:
         base = {
@@ -133,6 +176,20 @@ class CommandParameter:
 
         return base
 
+    def _convert_to_locale_strings(self) -> None:
+        if self._rename is MISSING:
+            self._rename = locale_str(self.name)
+        elif isinstance(self._rename, str):
+            self._rename = locale_str(self._rename)
+
+        if isinstance(self.description, str):
+            self.description = locale_str(self.description)
+
+        if self.choices:
+            for choice in self.choices:
+                if choice._locale_name is None:
+                    choice._locale_name = locale_str(choice.name)
+
     def is_choice_annotation(self) -> bool:
         return getattr(self._annotation, '__discord_app_commands_is_choice__', False)
 
@@ -158,7 +215,7 @@ class CommandParameter:
     @property
     def display_name(self) -> str:
         """:class:`str`: The name of the parameter as it should be displayed to the user."""
-        return self.name if self._rename is MISSING else self._rename
+        return self.name if self._rename is MISSING else str(self._rename)
 
 
 class Transformer:
@@ -459,6 +516,23 @@ class EnumNameTransformer(Transformer):
         return self._enum[value]
 
 
+class InlineTransformer(Transformer):
+    def __init__(self, annotation: Any) -> None:
+        super().__init__()
+        self.annotation: Any = annotation
+
+    @property
+    def _error_display_name(self) -> str:
+        return self.annotation.__name__
+
+    @property
+    def type(self) -> AppCommandOptionType:
+        return AppCommandOptionType.string
+
+    async def transform(self, interaction: Interaction, value: Any) -> Any:
+        return await self.annotation.transform(interaction, value)
+
+
 if TYPE_CHECKING:
     from typing_extensions import Annotated as Transform
     from typing_extensions import Annotated as Range
@@ -716,6 +790,17 @@ def get_supported_annotation(
         if annotation is Choice:
             raise TypeError(f'Choice requires a type argument of int, str, or float')
 
+        # Check if a transform @classmethod is given to the class
+        # These flatten into simple "inline" transformers with implicit strings
+        transform_classmethod = annotation.__dict__.get('transform', None)
+        if isinstance(transform_classmethod, classmethod):
+            params = inspect.signature(transform_classmethod.__func__).parameters
+            if len(params) != 3:
+                raise TypeError(f'Inline transformer with transform classmethod requires 3 parameters')
+            if not inspect.iscoroutinefunction(transform_classmethod.__func__):
+                raise TypeError(f'Inline transformer with transform classmethod must be a coroutine')
+            return (InlineTransformer(annotation), MISSING, False)
+
     # Check if there's an origin
     origin = getattr(annotation, '__origin__', None)
     if origin is Literal:
@@ -810,6 +895,6 @@ def annotation_to_parameter(annotation: Any, parameter: inspect.Parameter) -> Co
     if inner.autocomplete.__func__ is not Transformer.autocomplete:
         from .commands import _validate_auto_complete_callback
 
-        result.autocomplete = _validate_auto_complete_callback(inner.autocomplete, skip_binding=True)
+        result.autocomplete = _validate_auto_complete_callback(inner.autocomplete)
 
     return result

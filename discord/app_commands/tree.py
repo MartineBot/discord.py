@@ -56,10 +56,11 @@ from .errors import (
     CommandNotFound,
     CommandSignatureMismatch,
     CommandLimitReached,
+    CommandSyncFailure,
     MissingApplicationID,
 )
 from .translator import Translator, locale_str
-from ..errors import ClientException
+from ..errors import ClientException, HTTPException
 from ..enums import AppCommandType, InteractionType
 from ..utils import MISSING, _get_as_snowflake, _is_submodule
 
@@ -838,7 +839,7 @@ class CommandTree(Generic[ClientT]):
         nsfw: bool = False,
         guild: Optional[Snowflake] = MISSING,
         guilds: Sequence[Snowflake] = MISSING,
-        auto_locale_strings: bool = False,
+        auto_locale_strings: bool = True,
         extras: Dict[Any, Any] = MISSING,
     ) -> Callable[[CommandCallback[Group, P, T]], Command[Group, P, T]]:
         """Creates an application command directly under this tree.
@@ -868,7 +869,7 @@ class CommandTree(Generic[ClientT]):
             be wrapped into :class:`locale_str` rather than :class:`str`. This could
             avoid some repetition and be more ergonomic for certain defaults such
             as default command names, command descriptions, and parameter names.
-            Defaults to ``False``.
+            Defaults to ``True``.
         extras: :class:`dict`
             A dictionary that can be used to store extraneous data.
             The library will not touch any values or keys within this dictionary.
@@ -907,7 +908,7 @@ class CommandTree(Generic[ClientT]):
         nsfw: bool = False,
         guild: Optional[Snowflake] = MISSING,
         guilds: Sequence[Snowflake] = MISSING,
-        auto_locale_strings: bool = False,
+        auto_locale_strings: bool = True,
         extras: Dict[Any, Any] = MISSING,
     ) -> Callable[[ContextMenuCallback], ContextMenu]:
         """Creates an application command context menu from a regular function directly under this tree.
@@ -951,7 +952,7 @@ class CommandTree(Generic[ClientT]):
             be wrapped into :class:`locale_str` rather than :class:`str`. This could
             avoid some repetition and be more ergonomic for certain defaults such
             as default command names, command descriptions, and parameter names.
-            Defaults to ``False``.
+            Defaults to ``True``.
         extras: :class:`dict`
             A dictionary that can be used to store extraneous data.
             The library will not touch any values or keys within this dictionary.
@@ -1034,6 +1035,10 @@ class CommandTree(Generic[ClientT]):
         -------
         HTTPException
             Syncing the commands failed.
+        CommandSyncFailure
+            Syncing the commands failed due to a user related error, typically because
+            the command has invalid data. This is equivalent to an HTTP status code of
+            400.
         Forbidden
             The client does not have the ``applications.commands`` scope in the guild.
         MissingApplicationID
@@ -1058,24 +1063,31 @@ class CommandTree(Generic[ClientT]):
         else:
             payload = [command.to_dict() for command in commands]
 
-        if guild is None:
-            data = await self._http.bulk_upsert_global_commands(self.client.application_id, payload=payload)
-        else:
-            data = await self._http.bulk_upsert_guild_commands(self.client.application_id, guild.id, payload=payload)
+        try:
+            if guild is None:
+                data = await self._http.bulk_upsert_global_commands(self.client.application_id, payload=payload)
+            else:
+                data = await self._http.bulk_upsert_guild_commands(self.client.application_id, guild.id, payload=payload)
+        except HTTPException as e:
+            if e.status == 400:
+                raise CommandSyncFailure(e, commands) from None
+            raise
 
         return [AppCommand(data=d, state=self._state) for d in data]
 
     async def _dispatch_error(self, interaction: Interaction, error: AppCommandError, /) -> None:
         command = interaction.command
-        if isinstance(command, Command):
-            await command._invoke_error_handlers(interaction, error)
-        else:
+        interaction.command_failed = True
+        try:
+            if isinstance(command, Command):
+                await command._invoke_error_handlers(interaction, error)
+        finally:
             await self.on_error(interaction, error)
 
     def _from_interaction(self, interaction: Interaction) -> None:
         async def wrapper():
             try:
-                await self.call(interaction)
+                await self._call(interaction)
             except AppCommandError as e:
                 await self._dispatch_error(interaction, e)
 
@@ -1179,6 +1191,8 @@ class CommandTree(Generic[ClientT]):
             if ctx_menu.on_error is not None:
                 await ctx_menu.on_error(interaction, e)
             await self.on_error(interaction, e)
+        else:
+            self.client.dispatch('app_command_completion', interaction, ctx_menu)
 
     async def interaction_check(self, interaction: Interaction, /) -> bool:
         """|coro|
@@ -1191,30 +1205,9 @@ class CommandTree(Generic[ClientT]):
         """
         return True
 
-    async def call(self, interaction: Interaction) -> None:
-        """|coro|
-
-        Given an :class:`~discord.Interaction`, calls the matching
-        application command that's being invoked.
-
-        This is usually called automatically by the library.
-
-        Parameters
-        -----------
-        interaction: :class:`~discord.Interaction`
-            The interaction to dispatch from.
-
-        Raises
-        --------
-        CommandNotFound
-            The application command referred to could not be found.
-        CommandSignatureMismatch
-            The interaction data referred to a parameter that was not found in the
-            application command definition.
-        AppCommandError
-            An error occurred while calling the command.
-        """
+    async def _call(self, interaction: Interaction) -> None:
         if not await self.interaction_check(interaction):
+            interaction.command_failed = True
             return
 
         data: ApplicationCommandInteractionData = interaction.data  # type: ignore
@@ -1247,5 +1240,9 @@ class CommandTree(Generic[ClientT]):
         try:
             await command._invoke_with_namespace(interaction, namespace)
         except AppCommandError as e:
+            interaction.command_failed = True
             await command._invoke_error_handlers(interaction, e)
             await self.on_error(interaction, e)
+        else:
+            if not interaction.command_failed:
+                self.client.dispatch('app_command_completion', interaction, command)

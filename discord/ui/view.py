@@ -413,12 +413,14 @@ class View:
 
     async def _scheduled_task(self, item: Item, interaction: Interaction):
         try:
-            if self.timeout:
-                self.__timeout_expiry = time.monotonic() + self.timeout
+            item._refresh_state(interaction.data)  # type: ignore
 
             allow = await self.interaction_check(interaction)
             if not allow:
                 return
+
+            if self.timeout:
+                self.__timeout_expiry = time.monotonic() + self.timeout
 
             await item.callback(interaction)
         except Exception as e:
@@ -620,7 +622,6 @@ class ViewStore:
         if item is None:
             return
 
-        item._refresh_state(interaction.data)  # type: ignore
         # Note, at this point the View is *not* None
         item.view._dispatch_item(item, interaction)  # type: ignore
 
@@ -635,8 +636,7 @@ class ViewStore:
             _log.debug("Modal interaction referencing unknown custom_id %s. Discarding", custom_id)
             return
 
-        modal._refresh(components)
-        modal._dispatch_submit(interaction)
+        modal._dispatch_submit(interaction, components)
 
     def remove_interaction_mapping(self, interaction_id: int) -> None:
         # This is called before re-adding the view

@@ -116,6 +116,9 @@ class Interaction:
         A dictionary that can be used to store extraneous data for use during
         interaction processing. The library will not touch any values or keys
         within this dictionary.
+    command_failed: :class:`bool`
+        Whether the command associated with this interaction failed to execute.
+        This includes checks and execution.
     """
 
     __slots__: Tuple[str, ...] = (
@@ -132,13 +135,14 @@ class Interaction:
         'locale',
         'guild_locale',
         'extras',
+        'command_failed',
         '_permissions',
         '_app_permissions',
         '_state',
         '_client',
         '_session',
         '_baton',
-        '_original_message',
+        '_original_response',
         '_cs_response',
         '_cs_followup',
         '_cs_channel',
@@ -150,11 +154,12 @@ class Interaction:
         self._state: ConnectionState = state
         self._client: Client = state._get_client()
         self._session: ClientSession = state.http._HTTPClient__session  # type: ignore # Mangled attribute for __session
-        self._original_message: Optional[InteractionMessage] = None
+        self._original_response: Optional[InteractionMessage] = None
         # This baton is used for extra data that might be useful for the lifecycle of
         # an interaction. This is mainly for internal purposes and it gives it a free-for-all slot.
         self._baton: Any = MISSING
         self.extras: Dict[Any, Any] = {}
+        self.command_failed: bool = False
         self._from_data(data)
 
     def _from_data(self, data: InteractionPayload):
@@ -328,7 +333,7 @@ class Interaction:
         """:class:`bool`: Returns ``True`` if the interaction is expired."""
         return utils.utcnow() >= self.expires_at
 
-    async def original_message(self) -> InteractionMessage:
+    async def original_response(self) -> InteractionMessage:
         """|coro|
 
         Fetches the original interaction response message associated with the interaction.
@@ -355,8 +360,8 @@ class Interaction:
             The original interaction response message.
         """
 
-        if self._original_message is not None:
-            return self._original_message
+        if self._original_response is not None:
+            return self._original_response
 
         # TODO: fix later to not raise?
         channel = self.channel
@@ -375,10 +380,10 @@ class Interaction:
         state = _InteractionMessageState(self, self._state)
         # The state and channel parameters are mocked here
         message = InteractionMessage(state=state, channel=channel, data=data)  # type: ignore
-        self._original_message = message
+        self._original_response = message
         return message
 
-    async def edit_original_message(
+    async def edit_original_response(
         self,
         *,
         content: Optional[str] = MISSING,
@@ -471,7 +476,7 @@ class Interaction:
             self._state.store_view(view, message.id, interaction_id=self.id)
         return message
 
-    async def delete_original_message(self) -> None:
+    async def delete_original_response(self) -> None:
         """|coro|
 
         Deletes the original interaction response message.
@@ -880,8 +885,9 @@ class InteractionResponse:
 
         translator = self._parent._state._translator
         if translator is not None:
+            user_locale = self._parent.locale
             payload: Dict[str, Any] = {
-                'choices': [await option.get_translated_payload(translator) for option in choices],
+                'choices': [await option.get_translated_payload_for_locale(translator, user_locale) for option in choices],
             }
         else:
             payload: Dict[str, Any] = {
@@ -935,7 +941,7 @@ class InteractionMessage(Message):
     """Represents the original interaction response message.
 
     This allows you to edit or delete the message associated with
-    the interaction response. To retrieve this object see :meth:`Interaction.original_message`.
+    the interaction response. To retrieve this object see :meth:`Interaction.original_response`.
 
     This inherits from :class:`discord.Message` with changes to
     :meth:`edit` and :meth:`delete` to work.
@@ -1000,7 +1006,7 @@ class InteractionMessage(Message):
         :class:`InteractionMessage`
             The newly edited message.
         """
-        return await self._state._interaction.edit_original_message(
+        return await self._state._interaction.edit_original_response(
             content=content,
             embeds=embeds,
             embed=embed,
@@ -1087,10 +1093,10 @@ class InteractionMessage(Message):
             async def inner_call(delay: float = delay):
                 await asyncio.sleep(delay)
                 try:
-                    await self._state._interaction.delete_original_message()
+                    await self._state._interaction.delete_original_response()
                 except HTTPException:
                     pass
 
             asyncio.create_task(inner_call())
         else:
-            await self._state._interaction.delete_original_message()
+            await self._state._interaction.delete_original_response()

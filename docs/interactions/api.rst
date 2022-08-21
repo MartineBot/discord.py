@@ -435,6 +435,7 @@ Button
     :inherited-members:
 
 .. autofunction:: discord.ui.button
+    :decorator:
 
 Select
 ~~~~~~~
@@ -446,6 +447,7 @@ Select
     :inherited-members:
 
 .. autofunction:: discord.ui.select
+    :decorator:
 
 TextInput
 ~~~~~~~~~~
@@ -480,6 +482,14 @@ Command
 .. attributetable:: discord.app_commands.Command
 
 .. autoclass:: discord.app_commands.Command
+    :members:
+
+Parameter
+++++++++++
+
+.. attributetable:: discord.app_commands.Parameter
+
+.. autoclass:: discord.app_commands.Parameter()
     :members:
 
 ContextMenu
@@ -618,10 +628,18 @@ locale_str
 TranslationContext
 +++++++++++++++++++
 
-.. class:: TranslationContext
+.. attributetable:: discord.app_commands.TranslationContext
+
+.. autoclass:: discord.app_commands.TranslationContext
+    :members:
+
+TranslationContextLocation
++++++++++++++++++++++++++++
+
+.. class:: TranslationContextLocation
     :module: discord.app_commands
 
-    An enum representing the context that the translation occurs in when requested for translation.
+    An enum representing the location context that the translation occurs in when requested for translation.
 
     .. versionadded:: 2.0
 
@@ -631,6 +649,13 @@ TranslationContext
     .. attribute:: command_description
 
         The translation involved a command description.
+
+    .. attribute:: group_name
+
+        The translation involved a group name.
+    .. attribute:: group_description
+
+        The translation involved a group description.
     .. attribute:: parameter_name
 
         The translation involved a parameter name.
@@ -640,7 +665,10 @@ TranslationContext
     .. attribute:: choice_name
 
         The translation involved a choice name.
+    .. attribute:: other
 
+        The translation involved something else entirely. This is useful for running
+        :meth:`Translator.translate` for custom usage.
 
 Exceptions
 ~~~~~~~~~~~
@@ -693,8 +721,11 @@ Exceptions
 .. autoexception:: discord.app_commands.MissingApplicationID
     :members:
 
+.. autoexception:: discord.app_commands.CommandSyncFailure
+    :members:
+
 Exception Hierarchy
-~~~~~~~~~~~~~~~~~~~~
+++++++++++++++++++++
 
 .. exception_hierarchy::
 
@@ -715,3 +746,6 @@ Exception Hierarchy
             - :exc:`~discord.app_commands.CommandSignatureMismatch`
             - :exc:`~discord.app_commands.CommandNotFound`
             - :exc:`~discord.app_commands.MissingApplicationID`
+            - :exc:`~discord.app_commands.CommandSyncFailure`
+        - :exc:`~discord.HTTPException`
+            - :exc:`~discord.app_commands.CommandSyncFailure`

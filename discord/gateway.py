@@ -352,7 +352,7 @@ class DiscordWebSocket:
         sequence: Optional[int] = None,
         resume: bool = False,
         encoding: str = 'json',
-        zlib: bool = True,
+        zlib: bool = False,
     ) -> Self:
         """Creates a main websocket for Discord from a :class:`Client`.
 

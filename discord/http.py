@@ -2364,10 +2364,10 @@ class HTTPClient:
         if zlib:
             value = '{0}?encoding={1}&v={2}&compress=zlib-stream'
         else:
-            value = '{0}?encoding={1}&v={2}'
+            value = '{0}?encoding={1}&v={2}&compress='
         return value.format(data['url'], encoding, INTERNAL_API_VERSION)
 
-    async def get_bot_gateway(self, *, encoding: str = 'json', zlib: bool = False) -> Tuple[int, str]:
+    async def get_bot_gateway(self, *, encoding: str = 'json', zlib: bool = True) -> Tuple[int, str]:
         try:
             data = await self.request(Route('GET', '/gateway/bot'))
         except HTTPException as exc:
@@ -2376,7 +2376,7 @@ class HTTPClient:
         if zlib:
             value = '{0}?encoding={1}&v={2}&compress=zlib-stream'
         else:
-            value = '{0}?encoding={1}&v={2}'
+            value = '{0}?encoding={1}&v={2}&compress='
         return data['shards'], value.format(data['url'], encoding, INTERNAL_API_VERSION)
 
     def get_user(self, user_id: Snowflake) -> Response[user.User]:

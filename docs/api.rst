@@ -2678,6 +2678,42 @@ of :class:`enum.Enum`.
 
         .. versionadded:: 2.0
 
+    .. attribute:: automod_flag_message
+
+        An automod rule flagged a message.
+
+        When this is the action, the type of :attr:`~AuditLogEntry.target` is
+        a :class:`Member` with the ID of the person who triggered the automod rule.
+
+        When this is the action, the type of :attr:`~AuditLogEntry.extra` is
+        set to an unspecified proxy object with 3 attributes:
+
+        - ``automod_rule_name``: The name of the automod rule that was triggered.
+        - ``automod_rule_trigger``: A :class:`AutoModRuleTriggerType` representation of the rule type that was triggered.
+        - ``channel``: The channel in which the automod rule was triggered.
+
+        When this is the action, :attr:`AuditLogEntry.changes` is empty.
+
+        .. versionadded:: 2.1
+
+    .. attribute:: automod_timeout_member
+
+        An automod rule timed-out a member.
+
+        When this is the action, the type of :attr:`~AuditLogEntry.target` is
+        a :class:`Member` with the ID of the person who triggered the automod rule.
+
+        When this is the action, the type of :attr:`~AuditLogEntry.extra` is
+        set to an unspecified proxy object with 3 attributes:
+
+        - ``automod_rule_name``: The name of the automod rule that was triggered.
+        - ``automod_rule_trigger``: A :class:`AutoModRuleTriggerType` representation of the rule type that was triggered.
+        - ``channel``: The channel in which the automod rule was triggered.
+
+        When this is the action, :attr:`AuditLogEntry.changes` is empty.
+
+        .. versionadded:: 2.1
+
 .. class:: AuditLogActionCategory
 
     Represents the category that the :class:`AuditLogAction` belongs to.
@@ -3952,8 +3988,12 @@ User
 AutoMod
 ~~~~~~~
 
+.. attributetable:: AutoModRule
+
 .. autoclass:: AutoModRule()
     :members:
+
+.. attributetable:: AutoModAction
 
 .. autoclass:: AutoModAction()
     :members:
@@ -4037,20 +4077,32 @@ ScheduledEvent
 Integration
 ~~~~~~~~~~~~
 
+.. attributetable:: Integration
+
 .. autoclass:: Integration()
     :members:
+
+.. attributetable:: IntegrationAccount
 
 .. autoclass:: IntegrationAccount()
     :members:
 
+.. attributetable:: BotIntegration
+
 .. autoclass:: BotIntegration()
     :members:
+
+.. attributetable:: IntegrationApplication
 
 .. autoclass:: IntegrationApplication()
     :members:
 
+.. attributetable:: StreamIntegration
+
 .. autoclass:: StreamIntegration()
     :members:
+
+.. attributetable:: PartialIntegration
 
 .. autoclass:: PartialIntegration()
     :members:
@@ -4343,6 +4395,14 @@ GuildSticker
 .. attributetable:: GuildSticker
 
 .. autoclass:: GuildSticker()
+    :members:
+
+ShardInfo
+~~~~~~~~~~~
+
+.. attributetable:: ShardInfo
+
+.. autoclass:: ShardInfo()
     :members:
 
 RawMessageDeleteEvent
@@ -4658,20 +4718,12 @@ PermissionOverwrite
 .. autoclass:: PermissionOverwrite
     :members:
 
-ShardInfo
-~~~~~~~~~~~
-
-.. attributetable:: ShardInfo
-
-.. autoclass:: ShardInfo()
-    :members:
-
 SystemChannelFlags
 ~~~~~~~~~~~~~~~~~~~~
 
 .. attributetable:: SystemChannelFlags
 
-.. autoclass:: SystemChannelFlags()
+.. autoclass:: SystemChannelFlags
     :members:
 
 MessageFlags
@@ -4679,7 +4731,7 @@ MessageFlags
 
 .. attributetable:: MessageFlags
 
-.. autoclass:: MessageFlags()
+.. autoclass:: MessageFlags
     :members:
 
 PublicUserFlags
@@ -4687,8 +4739,18 @@ PublicUserFlags
 
 .. attributetable:: PublicUserFlags
 
-.. autoclass:: PublicUserFlags()
+.. autoclass:: PublicUserFlags
     :members:
+
+
+ForumTag
+~~~~~~~~~
+
+.. attributetable:: ForumTag
+
+.. autoclass:: ForumTag
+    :members:
+
 
 Exceptions
 ------------

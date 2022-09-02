@@ -1032,12 +1032,12 @@ class HTTPClient:
         self,
         user_id: Snowflake,
         guild_id: Snowflake,
-        delete_message_days: int = 1,
+        delete_message_seconds: int = 86400,  # one day
         reason: Optional[str] = None,
     ) -> Response[None]:
         r = Route('PUT', '/guilds/{guild_id}/bans/{user_id}', guild_id=guild_id, user_id=user_id)
         params = {
-            'delete_message_days': delete_message_days,
+            'delete_message_seconds': delete_message_seconds,
         }
 
         return self.request(r, params=params, reason=reason)
@@ -1143,7 +1143,12 @@ class HTTPClient:
             'invitable',
             'default_auto_archive_duration',
             'flags',
+            'default_thread_rate_limit_per_user',
+            'default_reaction_emoji',
+            'available_tags',
+            'applied_tags',
         )
+
         payload = {k: v for k, v in options.items() if k in valid_keys}
         return self.request(r, reason=reason, json=payload)
 

@@ -127,8 +127,8 @@ if TYPE_CHECKING:
     ]
 
     AutocompleteCallback = Union[
-        Callable[[GroupT, 'Interaction', ChoiceT], Coro[List[Choice[ChoiceT]]]],
-        Callable[['Interaction', ChoiceT], Coro[List[Choice[ChoiceT]]]],
+        Callable[[GroupT, 'Interaction', str], Coro[List[Choice[ChoiceT]]]],
+        Callable[['Interaction', str], Coro[List[Choice[ChoiceT]]]],
     ]
 else:
     CommandCallback = Callable[..., Coro[T]]
@@ -1041,8 +1041,7 @@ class Command(Generic[GroupT, P, T]):
         """A decorator that registers a coroutine as an autocomplete prompt for a parameter.
 
         The coroutine callback must have 2 parameters, the :class:`~discord.Interaction`,
-        and the current value by the user (usually either a :class:`str`, :class:`int`, or :class:`float`,
-        depending on the type of the parameter being marked as autocomplete).
+        and the current value by the user (the string currently being typed by the user).
 
         To get the values from other parameters that may be filled in, accessing
         :attr:`.Interaction.namespace` will give a :class:`Namespace` object with those
@@ -1578,7 +1577,7 @@ class Group:
                 # This is pretty hacky
                 # It allows the module to be fetched if someone just constructs a bare Group object though.
                 self.module = inspect.currentframe().f_back.f_globals['__name__']  # type: ignore
-            except (AttributeError, IndexError):
+            except (AttributeError, IndexError, KeyError):
                 self.module = None
 
         self._children: Dict[str, Union[Command, Group]] = {}

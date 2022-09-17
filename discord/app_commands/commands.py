@@ -433,6 +433,9 @@ def _extract_parameters_from_callback(func: Callable[..., Any], globalns: Dict[s
 
 def _get_context_menu_parameter(func: ContextMenuCallback) -> Tuple[str, Any, AppCommandType]:
     params = inspect.signature(func).parameters
+    if is_inside_class(func) and not hasattr(func, '__self__'):
+        raise TypeError('context menus cannot be defined inside a class')
+
     if len(params) != 2:
         msg = (
             f'context menu callback {func.__qualname__!r} requires 2 parameters, '
@@ -1847,7 +1850,7 @@ class Group:
         """
 
         if not isinstance(command, (Command, Group)):
-            raise TypeError(f'expected Command or Group not {command.__class__!r}')
+            raise TypeError(f'expected Command or Group not {command.__class__.__name__}')
 
         if isinstance(command, Group) and self.parent is not None:
             # In a tree like so:

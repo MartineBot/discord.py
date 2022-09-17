@@ -2006,24 +2006,24 @@ class ForumTag(Hashable):
     moderated: :class:`bool`
         Whether this tag can only be added or removed by a moderator with
         the :attr:`~Permissions.manage_threads` permission.
-    emoji: :class:`PartialEmoji`
+    emoji: Optional[:class:`PartialEmoji`]
         The emoji that is used to represent this tag.
         Note that if the emoji is a custom emoji, it will *not* have name information.
     """
 
     __slots__ = ('name', 'id', 'moderated', 'emoji')
 
-    def __init__(self, *, name: str, emoji: EmojiInputType, moderated: bool = False) -> None:
+    def __init__(self, *, name: str, emoji: Optional[EmojiInputType], moderated: bool = False) -> None:
         self.name: str = name
         self.id: int = 0
         self.moderated: bool = moderated
-        self.emoji: PartialEmoji
+        self.emoji: Optional[PartialEmoji] = None
         if isinstance(emoji, _EmojiTag):
             self.emoji = emoji._to_partial()
         elif isinstance(emoji, str):
             self.emoji = PartialEmoji.from_str(emoji)
         else:
-            raise TypeError(f'emoji must be a Emoji, PartialEmoji, or str not {emoji.__class__!r}')
+            raise TypeError(f'emoji must be a Emoji, PartialEmoji, or str not {emoji.__class__.__name__}')
 
     @classmethod
     def from_data(cls, *, state: ConnectionState, data: ForumTagPayload) -> Self:
@@ -2034,7 +2034,10 @@ class ForumTag(Hashable):
 
         emoji_name = data['emoji_name'] or ''
         emoji_id = utils._get_as_snowflake(data, 'emoji_id') or None  # Coerce 0 -> None
-        self.emoji = PartialEmoji.with_state(state=state, name=emoji_name, id=emoji_id)
+        if not emoji_name and not emoji_id:
+            self.emoji = None
+        else:
+            self.emoji = PartialEmoji.with_state(state=state, name=emoji_name, id=emoji_id)
         return self
 
     def to_dict(self) -> Dict[str, Any]:
@@ -2042,7 +2045,10 @@ class ForumTag(Hashable):
             'name': self.name,
             'moderated': self.moderated,
         }
-        payload.update(self.emoji._to_forum_tag_payload())
+        if self.emoji is not None:
+            payload.update(self.emoji._to_forum_tag_payload())
+        else:
+            payload.update(emoji_id=None, emoji_name=None)
 
         if self.id:
             payload['id'] = self.id
@@ -2167,7 +2173,7 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
         self.last_message_id: Optional[int] = utils._get_as_snowflake(data, 'last_message_id')
         # This takes advantage of the fact that dicts are ordered since Python 3.7
         tags = [ForumTag.from_data(state=self._state, data=tag) for tag in data.get('available_tags', [])]
-        self.default_thread_slowmode_delay: int = data.get('default_thread_slowmode_delay', 0)
+        self.default_thread_slowmode_delay: int = data.get('default_thread_rate_limit_per_user', 0)
         self._available_tags: Dict[int, ForumTag] = {tag.id: tag for tag in tags}
 
         self.default_reaction_emoji: Optional[PartialEmoji] = None
@@ -2393,7 +2399,7 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
         self,
         *,
         name: str,
-        emoji: PartialEmoji,
+        emoji: Optional[PartialEmoji] = None,
         moderated: bool = False,
         reason: Optional[str] = None,
     ) -> ForumTag:
@@ -2408,7 +2414,7 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
         ----------
         name: :class:`str`
             The name of the tag. Can only be up to 20 characters.
-        emoji: Union[:class:`str`, :class:`PartialEmoji`]
+        emoji: Optional[Union[:class:`str`, :class:`PartialEmoji`]]
             The emoji to use for the tag.
         moderated: :class:`bool`
             Whether the tag can only be applied by moderators.
@@ -2456,6 +2462,7 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
         stickers: Sequence[Union[GuildSticker, StickerItem]] = MISSING,
         allowed_mentions: AllowedMentions = MISSING,
         mention_author: bool = MISSING,
+        applied_tags: Sequence[ForumTag] = MISSING,
         view: View = MISSING,
         suppress_embeds: bool = False,
         reason: Optional[str] = None,
@@ -2499,6 +2506,8 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
             are used instead.
         mention_author: :class:`bool`
             If set, overrides the :attr:`~discord.AllowedMentions.replied_user` attribute of ``allowed_mentions``.
+        applied_tags: List[:class:`discord.ForumTag`]
+            A list of tags to apply to the thread.
         view: :class:`discord.ui.View`
             A Discord UI View to add to the message.
         stickers: Sequence[Union[:class:`~discord.GuildSticker`, :class:`~discord.StickerItem`]]
@@ -2535,7 +2544,7 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
             sticker_ids: SnowflakeList = [s.id for s in stickers]
 
         if view and not hasattr(view, '__discord_ui_view__'):
-            raise TypeError(f'view parameter must be View not {view.__class__!r}')
+            raise TypeError(f'view parameter must be View not {view.__class__.__name__}')
 
         if suppress_embeds:
             from .message import MessageFlags  # circular import
@@ -2552,6 +2561,9 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
             'rate_limit_per_user': slowmode_delay,
             'type': 11,  # Private threads don't seem to be allowed
         }
+
+        if applied_tags is not MISSING:
+            channel_payload['applied_tags'] = [str(tag.id) for tag in applied_tags]
 
         with handle_message_parameters(
             content=content,

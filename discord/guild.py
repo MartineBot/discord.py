@@ -246,6 +246,7 @@ class Guild(Hashable):
         - ``VERIFIED``: Guild is a verified server.
         - ``VIP_REGIONS``: Guild can have 384kbps bitrate in voice channels.
         - ``WELCOME_SCREEN_ENABLED``: Guild has enabled the welcome screen.
+        - ``INVITES_DISABLED``: Guild has disabled invites.
 
     premium_tier: :class:`int`
         The premium tier for this guild. Corresponds to "Nitro Server" in the official UI.
@@ -349,6 +350,8 @@ class Guild(Hashable):
         self._members: Dict[int, Member] = {}
         self._voice_states: Dict[int, VoiceState] = {}
         self._threads: Dict[int, Thread] = {}
+        self._stage_instances: Dict[int, StageInstance] = {}
+        self._scheduled_events: Dict[int, ScheduledEvent] = {}
         self._state: ConnectionState = state
         self._member_count: Optional[int] = None
         self._from_data(data)
@@ -509,17 +512,6 @@ class Guild(Hashable):
         self.approximate_presence_count: Optional[int] = guild.get('approximate_presence_count')
         self.approximate_member_count: Optional[int] = guild.get('approximate_member_count')
         self.premium_progress_bar_enabled: bool = guild.get('premium_progress_bar_enabled', False)
-
-        self._stage_instances: Dict[int, StageInstance] = {}
-        for s in guild.get('stage_instances', []):
-            stage_instance = StageInstance(guild=self, data=s, state=state)
-            self._stage_instances[stage_instance.id] = stage_instance
-
-        self._scheduled_events: Dict[int, ScheduledEvent] = {}
-        for s in guild.get('guild_scheduled_events', []):
-            scheduled_event = ScheduledEvent(data=s, state=state)
-            self._scheduled_events[scheduled_event.id] = scheduled_event
-
         self.owner_id: Optional[int] = utils._get_as_snowflake(guild, 'owner_id')
 
         self._sync(guild)
@@ -563,6 +555,16 @@ class Guild(Hashable):
             threads = data['threads']
             for thread in threads:
                 self._add_thread(Thread(guild=self, state=self._state, data=thread))
+
+        if 'stage_instances' in data:
+            for s in data['stage_instances']:
+                stage_instance = StageInstance(guild=self, data=s, state=self._state)
+                self._stage_instances[stage_instance.id] = stage_instance
+
+        if 'guild_scheduled_events' in data:
+            for s in data['guild_scheduled_events']:
+                scheduled_event = ScheduledEvent(data=s, state=self._state)
+                self._scheduled_events[scheduled_event.id] = scheduled_event
 
     @property
     def channels(self) -> Sequence[GuildChannel]:
@@ -1715,6 +1717,8 @@ class Guild(Hashable):
         rules_channel: Optional[TextChannel] = MISSING,
         public_updates_channel: Optional[TextChannel] = MISSING,
         premium_progress_bar_enabled: bool = MISSING,
+        discoverable: bool = MISSING,
+        invites_disabled: bool = MISSING,
     ) -> Guild:
         r"""|coro|
 
@@ -1743,6 +1747,9 @@ class Guild(Hashable):
 
         .. versionchanged:: 2.0
             The ``premium_progress_bar_enabled`` keyword parameter was added.
+
+        .. versionchanged:: 2.1
+            The ``discoverable`` and ``invites_disabled`` keyword parameters were added.
 
         Parameters
         ----------
@@ -1803,6 +1810,10 @@ class Guild(Hashable):
             public updates channel.
         premium_progress_bar_enabled: :class:`bool`
             Whether the premium AKA server boost level progress bar should be enabled for the guild.
+        discoverable: :class:`bool`
+            Whether server discovery is enabled for this guild.
+        invites_disabled: :class:`bool`
+            Whether joining via invites should be disabled for the guild.
         reason: Optional[:class:`str`]
             The reason for editing this guild. Shows up on the audit log.
 
@@ -1923,17 +1934,34 @@ class Guild(Hashable):
 
             fields['system_channel_flags'] = system_channel_flags.value
 
-        if community is not MISSING:
-            features = []
-            if community:
-                if 'rules_channel_id' in fields and 'public_updates_channel_id' in fields:
-                    features.append('COMMUNITY')
-                else:
-                    raise ValueError(
-                        'community field requires both rules_channel and public_updates_channel fields to be provided'
-                    )
+        if any(feat is not MISSING for feat in (community, discoverable, invites_disabled)):
 
-            fields['features'] = features
+            features = set(self.features)
+
+            if community is not MISSING:
+                if community:
+                    if 'rules_channel_id' in fields and 'public_updates_channel_id' in fields:
+                        features.add('COMMUNITY')
+                    else:
+                        raise ValueError(
+                            'community field requires both rules_channel and public_updates_channel fields to be provided'
+                        )
+                else:
+                    features.discard('COMMUNITY')
+
+            if discoverable is not MISSING:
+                if discoverable:
+                    features.add('DISCOVERABLE')
+                else:
+                    features.discard('DISCOVERABLE')
+
+            if invites_disabled is not MISSING:
+                if invites_disabled:
+                    features.add('INVITES_DISABLED')
+                else:
+                    features.discard('INVITES_DISABLED')
+
+            fields['features'] = list(features)
 
         if premium_progress_bar_enabled is not MISSING:
             fields['premium_progress_bar_enabled'] = premium_progress_bar_enabled
@@ -2874,7 +2902,8 @@ class Guild(Hashable):
                 _entity_type = getattr(channel, '_scheduled_event_entity_type', MISSING)
                 if _entity_type is None:
                     raise TypeError(
-                        f'invalid GuildChannel type passed, must be VoiceChannel or StageChannel not {channel.__class__!r}'
+                        'invalid GuildChannel type passed, must be VoiceChannel or StageChannel '
+                        f'not {channel.__class__.__name__}'
                     )
                 if _entity_type is MISSING:
                     raise TypeError('entity_type must be passed in when passing an ambiguous channel type')

@@ -69,7 +69,7 @@ if TYPE_CHECKING:
     # Generally, these two libraries are supposed to be separate from each other.
     # However, for type hinting purposes it's unfortunately necessary for one to
     # reference the other to prevent type checking errors in callbacks
-    from discord.ext.commands import Cog
+    from discord.ext import commands
 
     ErrorFunc = Callable[[Interaction, AppCommandError], Coroutine[Any, Any, None]]
 
@@ -105,7 +105,7 @@ Error = Union[
     UnboundError,
 ]
 Check = Callable[['Interaction'], Union[bool, Coro[bool]]]
-Binding = Union['Group', 'Cog']
+Binding = Union['Group', 'commands.Cog']
 
 
 if TYPE_CHECKING:
@@ -459,6 +459,11 @@ def _get_context_menu_parameter(func: ContextMenuCallback) -> Tuple[str, Any, Ap
     resolved = resolve_annotation(parameter.annotation, func.__globals__, func.__globals__, {})
     type = _context_menu_annotation(resolved)
     return (parameter.name, resolved, type)
+
+
+def mark_overrideable(func: F) -> F:
+    func.__discord_app_commands_base_function__ = None
+    return func
 
 
 class Parameter:
@@ -818,13 +823,16 @@ class Command(Generic[GroupT, P, T]):
         parent = self.parent
         if parent is not None:
             # Check if the on_error is overridden
-            if parent.__class__.on_error is not Group.on_error:
+            if not hasattr(parent.on_error, '__discord_app_commands_base_function__'):
                 return True
 
             if parent.parent is not None:
-                parent_cls = parent.parent.__class__
-                if parent_cls.on_error is not Group.on_error:
+                if not hasattr(parent.parent.on_error, '__discord_app_commands_base_function__'):
                     return True
+
+        # Check if we have a bound error handler
+        if hasattr(self.binding, '__discord_app_commands_error_handler__'):
+            return True
 
         return False
 
@@ -1149,7 +1157,7 @@ class ContextMenu:
     one of the following decorators:
 
     - :func:`~discord.app_commands.context_menu`
-    - :meth:`CommandTree.command <discord.app_commands.CommandTree.context_menu>`
+    - :meth:`CommandTree.context_menu <discord.app_commands.CommandTree.context_menu>`
 
     .. versionadded:: 2.0
 
@@ -1747,6 +1755,7 @@ class Group:
             if isinstance(command, Group):
                 yield from command.walk_commands()
 
+    @mark_overrideable
     async def on_error(self, interaction: Interaction, error: AppCommandError, /) -> None:
         """|coro|
 

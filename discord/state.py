@@ -734,6 +734,7 @@ class ConnectionState:
                     self.dispatch('reaction_clear_emoji', reaction)
 
     def parse_interaction_create(self, data: gw.InteractionCreateEvent) -> None:
+        self.dispatch('raw_interaction', data)
         interaction = Interaction(data=data, state=self)
         if data['type'] in (2, 4) and self._command_tree:  # application command and auto complete
             self._command_tree._from_interaction(interaction)

@@ -840,6 +840,14 @@ class HTTPClient:
 
                     # we are being rate limited, retry as it should be handled on proxy side
                     if response.status == 429:
+                        if not response.headers.get('Via') or isinstance(data, str):
+                            # Banned by Cloudflare more than likely.
+                            raise HTTPException(response, data)
+
+                        # Handle "The channel you are writing has hit the write rate limit "
+                        if data["code"] == 20028:
+                            await asyncio.sleep(data['retry_after'])
+
                         continue
 
                     # the usual error cases

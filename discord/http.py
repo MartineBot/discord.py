@@ -845,7 +845,7 @@ class HTTPClient:
                             raise HTTPException(response, data)
 
                         # Handle "The channel you are writing has hit the write rate limit "
-                        if data["code"] == 20028:
+                        if data.get("code") == 20028:
                             await asyncio.sleep(data['retry_after'])
 
                         continue

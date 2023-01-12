@@ -619,6 +619,28 @@ Guilds
     :param after: A list of stickers after the update.
     :type after: Sequence[:class:`GuildSticker`]
 
+.. function:: on_audit_log_entry_create(entry)
+
+    Called when a :class:`Guild` gets a new audit log entry.
+    You must have :attr:`~Permissions.view_audit_log` to receive this.
+
+    This requires :attr:`Intents.moderation` to be enabled.
+
+    .. versionadded:: 2.2
+
+    .. warning::
+
+        Audit log entries received through the gateway are subject to data retrieval
+        from cache rather than REST. This means that some data might not be present
+        when you expect it to be. For example, the :attr:`AuditLogEntry.target`
+        attribute will usually be a :class:`discord.Object` and the
+        :attr:`AuditLogEntry.user` attribute will depend on user and member cache.
+
+        To get the user ID of entry, :attr:`AuditLogEntry.user_id` can be used instead.
+
+    :param entry: The audit log entry that was created.
+    :type entry: :class:`AuditLogEntry`
+
 .. function:: on_invite_create(invite)
 
     Called when an :class:`Invite` is created.
@@ -813,7 +835,7 @@ Members
 
     Called when user gets banned from a :class:`Guild`.
 
-    This requires :attr:`Intents.bans` to be enabled.
+    This requires :attr:`Intents.moderation` to be enabled.
 
     :param guild: The guild the user got banned from.
     :type guild: :class:`Guild`
@@ -826,7 +848,7 @@ Members
 
     Called when a :class:`User` gets unbanned from a :class:`Guild`.
 
-    This requires :attr:`Intents.bans` to be enabled.
+    This requires :attr:`Intents.moderation` to be enabled.
 
     :param guild: The guild the user got unbanned from.
     :type guild: :class:`Guild`
@@ -1618,6 +1640,22 @@ of :class:`enum.Enum`.
         sent if the rule is configured to sent an alert when triggered.
 
         .. versionadded:: 2.0
+    .. attribute:: role_subscription_purchase
+
+        The system message sent when a user purchases or renews a role subscription.
+
+        .. versionadded:: 2.2
+    .. attribute:: interaction_premium_upsell
+
+        The system message sent when a user is given an advertisement to purchase a premium tier for
+        an application during an interaction.
+
+        .. versionadded:: 2.2
+    .. attribute:: guild_application_premium_subscription
+
+        The system message sent when an application's premium subscription is purchased for the guild.
+
+        .. versionadded:: 2.2
 
 .. class:: UserFlags
 
@@ -1673,7 +1711,7 @@ of :class:`enum.Enum`.
         The user is an Early Verified Bot Developer.
     .. attribute:: discord_certified_moderator
 
-        The user is a Discord Certified Moderator.
+        The user is a Moderator Programs Alumni.
     .. attribute:: bot_http_interactions
 
         The user is a bot that only uses HTTP interactions and is shown in the online member list.
@@ -2854,6 +2892,12 @@ of :class:`enum.Enum`.
 
         Represents a sticker with a lottie image.
 
+    .. attribute:: gif
+
+        Represents a sticker with a gif image.
+
+        .. versionadded:: 2.2
+
 .. class:: InviteTarget
 
     Represents the invite type for voice channel invites.
@@ -3209,6 +3253,26 @@ of :class:`enum.Enum`.
     .. attribute:: timeout
 
         The rule will timeout a user.
+
+
+.. class:: ForumLayoutType
+
+    Represents how a forum's posts are layed out in the client.
+
+    .. versionadded:: 2.2
+
+    .. attribute:: not_set
+
+        No default has been set, so it is up to the client to know how to lay it out.
+
+    .. attribute:: list_view
+
+        Displays posts as a list.
+
+    .. attribute:: gallery_view
+
+        Displays posts as a collection of tiles.
+
 
 .. _discord-api-audit-logs:
 
@@ -4604,6 +4668,14 @@ MessageApplication
 .. attributetable:: MessageApplication
 
 .. autoclass:: MessageApplication
+    :members:
+
+RoleSubscriptionInfo
+~~~~~~~~~~~~~~~~~~~~~
+
+.. attributetable:: RoleSubscriptionInfo
+
+.. autoclass:: RoleSubscriptionInfo
     :members:
 
 Intents

@@ -290,6 +290,24 @@ class SystemChannelFlags(BaseFlags):
         """
         return 8
 
+    @flag_value
+    def role_subscription_purchase_notifications(self):
+        """:class:`bool`: Returns ``True`` if role subscription purchase and renewal
+        notifications are enabled.
+
+        .. versionadded:: 2.2
+        """
+        return 16
+
+    @flag_value
+    def role_subscription_purchase_notification_replies(self):
+        """:class:`bool`: Returns ``True`` if the role subscription notifications
+        have a sticker reply button.
+
+        .. versionadded:: 2.2
+        """
+        return 32
+
 
 @fill_with_flags()
 class MessageFlags(BaseFlags):
@@ -759,15 +777,25 @@ class Intents(BaseFlags):
         return 1 << 1
 
     @flag_value
-    def bans(self):
-        """:class:`bool`: Whether guild ban related events are enabled.
+    def moderation(self):
+        """:class:`bool`: Whether guild moderation related events are enabled.
 
         This corresponds to the following events:
 
         - :func:`on_member_ban`
         - :func:`on_member_unban`
+        - :func:`on_audit_log_entry_create`
 
         This does not correspond to any attributes or classes in the library in terms of cache.
+        """
+        return 1 << 2
+
+    @alias_flag_value
+    def bans(self):
+        """:class:`bool`: An alias of :attr:`moderation`.
+
+        .. versionchanged:: 2.2
+            Changed to an alias.
         """
         return 1 << 2
 

@@ -1264,6 +1264,7 @@ class HTTPClient:
             'default_reaction_emoji',
             'available_tags',
             'applied_tags',
+            'default_forum_layout',
         )
 
         payload = {k: v for k, v in options.items() if k in valid_keys}

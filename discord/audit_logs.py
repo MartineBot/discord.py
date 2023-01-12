@@ -541,9 +541,13 @@ class AuditLogEntry(Hashable):
     -----------
     action: :class:`AuditLogAction`
         The action that was done.
-    user: :class:`abc.User`
+    user: Optional[:class:`abc.User`]
         The user who initiated this action. Usually a :class:`Member`\, unless gone
         then it's a :class:`User`.
+    user_id: Optional[:class:`int`]
+        The user ID who initiated this action.
+
+        .. versionadded:: 2.2
     id: :class:`int`
         The entry ID.
     target: Any
@@ -666,8 +670,8 @@ class AuditLogEntry(Hashable):
         # into meaningful data when requested
         self._changes = data.get('changes', [])
 
-        user_id = utils._get_as_snowflake(data, 'user_id')
-        self.user: Optional[Union[User, Member]] = self._get_member(user_id)
+        self.user_id: Optional[int] = utils._get_as_snowflake(data, 'user_id')
+        self.user: Optional[Union[User, Member]] = self._get_member(self.user_id)
         self._target_id = utils._get_as_snowflake(data, 'target_id')
 
     def _get_member(self, user_id: Optional[int]) -> Union[Member, User, None]:

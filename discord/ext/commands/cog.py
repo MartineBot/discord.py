@@ -338,14 +338,14 @@ class Cog(metaclass=CogMeta):
                 app_command: Optional[Union[app_commands.Group, app_commands.Command[Self, ..., Any]]] = getattr(
                     command, 'app_command', None
                 )
-                if app_command:
+                if app_command is not None:
                     group_parent = self.__cog_app_commands_group__
                     app_command = app_command._copy_with(parent=group_parent, binding=self)
                     # The type checker does not see the app_command attribute even though it exists
                     command.app_command = app_command  # type: ignore
 
                     if self.__cog_app_commands_group__:
-                        children.append(app_command)
+                        children.append(app_command)  # type: ignore # Somehow it thinks it can be None here
 
         if Cog._get_overridden_method(self.cog_app_command_error) is not None:
             error_handler = self.cog_app_command_error
@@ -751,6 +751,9 @@ class GroupCog(Cog):
     Decorators such as :func:`~discord.app_commands.guild_only`, :func:`~discord.app_commands.guilds`,
     and :func:`~discord.app_commands.default_permissions` will apply to the group if used on top of the
     cog.
+
+    Hybrid commands will also be added to the Group, giving the ability categorize slash commands into
+    groups, while keeping the prefix-style commmand as a root-level command.
 
     For example:
 

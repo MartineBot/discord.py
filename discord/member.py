@@ -355,7 +355,7 @@ class Member(discord.abc.Messageable, _UserTag):
         self.pending: bool = data.get('pending', False)
         self._avatar: Optional[str] = data.get('avatar')
         self._permissions: Optional[int]
-        self._flags: int = data['flags']
+        self._flags: int = data.get('flags', 0)
         try:
             self._permissions = int(data['permissions'])
         except KeyError:

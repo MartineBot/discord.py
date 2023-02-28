@@ -1654,6 +1654,31 @@ of :class:`enum.Enum`.
         an application during an interaction.
 
         .. versionadded:: 2.2
+    .. attribute:: stage_start
+
+        The system message sent when the stage starts.
+
+        .. versionadded:: 2.2
+    .. attribute:: stage_end
+
+        The system message sent when the stage ends.
+
+        .. versionadded:: 2.2
+    .. attribute:: stage_speaker
+
+        The system message sent when the stage speaker changes.
+
+        .. versionadded:: 2.2
+    .. attribute:: stage_raise_hand
+
+        The system message sent when a user is requesting to speak by raising their hands.
+
+        .. versionadded:: 2.2
+    .. attribute:: stage_topic
+
+        The system message sent when the stage topic changes.
+
+        .. versionadded:: 2.2
     .. attribute:: guild_application_premium_subscription
 
         The system message sent when an application's premium subscription is purchased for the guild.
@@ -1950,6 +1975,8 @@ of :class:`enum.Enum`.
         - :attr:`~AuditLogDiff.verification_level`
         - :attr:`~AuditLogDiff.widget_channel`
         - :attr:`~AuditLogDiff.widget_enabled`
+        - :attr:`~AuditLogDiff.premium_progress_bar_enabled`
+        - :attr:`~AuditLogDiff.system_channel_flags`
 
     .. attribute:: channel_create
 
@@ -3911,6 +3938,20 @@ AuditLogDiff
         The list of channels or threads that are exempt from the automod rule.
 
         :type: List[:class:`abc.GuildChannel`, :class:`Thread`, :class:`Object`]
+
+    .. attribute:: premium_progress_bar_enabled
+
+        The guild’s display setting to show boost progress sidebar
+
+        :type: :class:`bool`
+
+    .. attribute:: system_channel_flags
+
+        The guild’s system channel settings.
+
+        See also :attr:`Guild.system_channel_flags`
+
+        :type: :class:`SystemChannelFlags`
 
 .. this is currently missing the following keys: reason and application_id
    I'm not sure how to port these

@@ -1109,6 +1109,7 @@ class ConnectionState(Generic[ClientT]):
             integrations={},
             app_commands={},
             automod_rules={},
+            webhooks={},
             data=data,
             guild=guild,
         )

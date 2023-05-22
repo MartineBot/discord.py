@@ -281,6 +281,7 @@ def _set_api_version(value: int):
     INTERNAL_API_VERSION = value
     Route.BASE = f'{INTERNAL_API_BASE}/v{value}'
 
+
 def _set_api_base(value: str):
     global INTERNAL_API_BASE
 
@@ -560,7 +561,7 @@ class HTTPClient:
             self._buckets[key] = value = Ratelimit(self.max_ratelimit_timeout)
             self._try_clear_expired_ratelimits()
         return value
-    
+
     async def request(
         self,
         route: Route,

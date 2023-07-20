@@ -2799,6 +2799,18 @@ of :class:`enum.Enum`.
 
         .. versionadded:: 2.1
 
+    .. attribute:: creator_monetization_request_created
+
+        A request to monetize the server was created.
+
+        .. versionadded:: 2.4
+
+    .. attribute:: creator_monetization_terms_accepted
+
+        The terms and conditions for creator monetization were accepted.
+
+        .. versionadded:: 2.4
+
 .. class:: AuditLogActionCategory
 
     Represents the category that the :class:`AuditLogAction` belongs to.
@@ -4968,6 +4980,22 @@ MemberFlags
 .. attributetable:: MemberFlags
 
 .. autoclass:: MemberFlags
+    :members:
+
+AttachmentFlags
+~~~~~~~~~~~~~~~~
+
+.. attributetable:: AttachmentFlags
+
+.. autoclass:: AttachmentFlags
+    :members:
+
+RoleFlags
+~~~~~~~~~~
+
+.. attributetable:: RoleFlags
+
+.. autoclass:: RoleFlags
     :members:
 
 ForumTag

@@ -307,7 +307,7 @@ class Cog(metaclass=CogMeta):
 
         # Register the application commands
         children: List[Union[app_commands.Group, app_commands.Command[Self, ..., Any]]] = []
-        # app_command_refs: Dict[str, Union[app_commands.Group, app_commands.Command[Self, ..., Any]]] = {}
+        app_command_refs: Dict[str, Union[app_commands.Group, app_commands.Command[Self, ..., Any]]] = {}
 
         if cls.__cog_is_app_commands_group__:
             group = app_commands.Group(
@@ -336,13 +336,13 @@ class Cog(metaclass=CogMeta):
 
                 # # Hybrid commands already deal with updating the reference
                 # # Due to the copy below, so we need to handle them specially
-                # if hasattr(parent, '__commands_is_hybrid__') and hasattr(command, '__commands_is_hybrid__'):
-                #     current: Optional[Union[app_commands.Group, app_commands.Command[Self, ..., Any]]] = getattr(
-                #         command, 'app_command', None
-                #     )
-                #     updated = app_command_refs.get(command.qualified_name)
-                #     if current and updated:
-                #         command.app_command = updated  # type: ignore  # Safe attribute access
+                if hasattr(parent, '__commands_is_hybrid__') and hasattr(command, '__commands_is_hybrid__'):
+                    current: Optional[Union[app_commands.Group, app_commands.Command[Self, ..., Any]]] = getattr(
+                        command, 'app_command', None
+                    )
+                    updated = app_command_refs.get(command.qualified_name)
+                    if current and updated:
+                        command.app_command = updated  # type: ignore  # Safe attribute access
 
                 # Update our parent's reference to our self
                 parent.remove_command(command.name)  # type: ignore
@@ -358,10 +358,12 @@ class Cog(metaclass=CogMeta):
                     # The type checker does not see the app_command attribute even though it exists
                     command.app_command = app_command  # type: ignore
 
-                    # # Update all the references to point to the new copy
-                    # if isinstance(app_command, app_commands.Group):
-                    #     for child in app_command.walk_commands():
-                    #         app_command_refs[child.qualified_name] = child
+                    # Update all the references to point to the new copy
+                    if isinstance(app_command, app_commands.Group):
+                        for child in app_command.walk_commands():
+                            app_command_refs[child.qualified_name] = child
+                            if hasattr(child, '__commands_is_hybrid_app_command__') and child.qualified_name in lookup:
+                                child.wrapped = lookup[child.qualified_name]  # type: ignore
 
                     if self.__cog_app_commands_group__:
                         children.append(app_command)  # type: ignore # Somehow it thinks it can be None here

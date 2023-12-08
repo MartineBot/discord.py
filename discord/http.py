@@ -2553,7 +2553,7 @@ class HTTPClient:
         return self.request(
             Route(
                 'POST',
-                '/applications/{application.id}/entitlements',
+                '/applications/{application_id}/entitlements',
                 application_id=application_id,
             ),
             json=payload,
@@ -2574,6 +2574,22 @@ class HTTPClient:
     def application_info(self) -> Response[appinfo.AppInfo]:
         return self.request(Route('GET', '/oauth2/applications/@me'))
 
+    def edit_application_info(self, *, reason: Optional[str], payload: Any) -> Response[appinfo.AppInfo]:
+        valid_keys = (
+            'custom_install_url',
+            'description',
+            'role_connections_verification_url',
+            'install_params',
+            'flags',
+            'icon',
+            'cover_image',
+            'interactions_endpoint_url ',
+            'tags',
+        )
+
+        payload = {k: v for k, v in payload.items() if k in valid_keys}
+        return self.request(Route('PATCH', '/applications/@me'), json=payload, reason=reason)
+
     async def get_gateway(self, *, encoding: str = 'json', zlib: bool = False) -> str:
         try:
             data = await self.request(Route('GET', '/gateway'))
@@ -2585,7 +2601,7 @@ class HTTPClient:
             value = '{0}?encoding={1}&v={2}&compress='
         return value.format(data['url'], encoding, INTERNAL_API_VERSION)
 
-    async def get_bot_gateway(self, *, encoding: str = 'json', zlib: bool = True) -> Tuple[int, str]:
+    async def get_bot_gateway(self, *, encoding: str = 'json', zlib: bool = False) -> Tuple[int, str]:
         try:
             data = await self.request(Route('GET', '/gateway/bot'))
         except HTTPException as exc:

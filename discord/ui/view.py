@@ -153,6 +153,9 @@ class View:
     timeout: Optional[:class:`float`]
         Timeout in seconds from last interaction with the UI before no longer accepting input.
         If ``None`` then there is no timeout.
+    clear_dynamic_items: :class:`bool`
+        Whether to clear dynamic items from the view store when it is stopped.
+        Defaults to ``True``.
     """
 
     __discord_ui_view__: ClassVar[bool] = True
@@ -183,8 +186,9 @@ class View:
             children.append(item)
         return children
 
-    def __init__(self, *, timeout: Optional[float] = 180.0):
+    def __init__(self, *, timeout: Optional[float] = 180.0, clear_dynamic_items: bool = True):
         self.__timeout = timeout
+        self._clear_dynamic_items = clear_dynamic_items
         self._children: List[Item[Self]] = self._init_children()
         self.__weights = _ViewWeights(self._children)
         self.id: str = os.urandom(16).hex()
@@ -596,7 +600,7 @@ class ViewStore:
         dispatch_info = self._views.get(view._cache_key)
         if dispatch_info:
             for item in view._children:
-                if isinstance(item, DynamicItem):
+                if isinstance(item, DynamicItem) and view._clear_dynamic_items:
                     pattern = item.__discord_ui_compiled_template__
                     self._dynamic_items.pop(pattern, None)
                 elif item.is_dispatchable():

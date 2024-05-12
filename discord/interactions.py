@@ -78,6 +78,7 @@ if TYPE_CHECKING:
     from .channel import VoiceChannel, StageChannel, TextChannel, ForumChannel, CategoryChannel, DMChannel, GroupChannel
     from .threads import Thread
     from .app_commands.commands import Command, ContextMenu
+    from .poll import Poll
 
     InteractionChannel = Union[
         VoiceChannel,
@@ -762,6 +763,7 @@ class InteractionResponse(Generic[ClientT]):
         suppress_embeds: bool = False,
         silent: bool = False,
         delete_after: Optional[float] = None,
+        poll: Poll = MISSING,
     ) -> None:
         """|coro|
 
@@ -842,6 +844,7 @@ class InteractionResponse(Generic[ClientT]):
             allowed_mentions=allowed_mentions,
             flags=flags,
             view=view,
+            poll=poll,
         )
 
         http = parent._state.http
@@ -949,7 +952,7 @@ class InteractionResponse(Generic[ClientT]):
             message_id = msg.id
             # If this was invoked via an application command then we can use its original interaction ID
             # Since this is used as a cache key for view updates
-            original_interaction_id = msg.interaction.id if msg.interaction is not None else None
+            original_interaction_id = msg.interaction_metadata.id if msg.interaction_metadata is not None else None
         else:
             message_id = None
             original_interaction_id = None

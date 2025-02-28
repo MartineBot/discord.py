@@ -540,7 +540,7 @@ class ConnectionState(Generic[ClientT]):
     ) -> Tuple[Union[Channel, Thread], Optional[Guild]]:
         channel_id = int(data['channel_id'])
         try:
-            guild_id = guild_id or int(data['guild_id'])
+            guild_id = guild_id or int(data['guild_id'])  # pyright: ignore[reportTypedDictNotRequiredAccess]
             guild = self._get_guild(guild_id)
         except KeyError:
             channel = DMChannel._from_message(self, channel_id)
@@ -736,7 +736,7 @@ class ConnectionState(Generic[ClientT]):
 
         if 'components' in data:
             try:
-                entity_id = int(data['interaction']['id'])
+                entity_id = int(data['interaction']['id'])  # pyright: ignore[reportTypedDictNotRequiredAccess]
             except (KeyError, ValueError):
                 entity_id = raw.message_id
 
@@ -936,7 +936,7 @@ class ConnectionState(Generic[ClientT]):
     def parse_channel_pins_update(self, data: gw.ChannelPinsUpdateEvent) -> None:
         channel_id = int(data['channel_id'])
         try:
-            guild = self._get_guild(int(data['guild_id']))
+            guild = self._get_guild(int(data['guild_id']))  # pyright: ignore[reportTypedDictNotRequiredAccess]
         except KeyError:
             guild = None
             channel = self._get_private_channel(channel_id)
@@ -1018,7 +1018,7 @@ class ConnectionState(Generic[ClientT]):
             return
 
         try:
-            channel_ids = {int(i) for i in data['channel_ids']}
+            channel_ids = {int(i) for i in data['channel_ids']}  # pyright: ignore[reportTypedDictNotRequiredAccess]
         except KeyError:
             # If not provided, then the entire guild is being synced
             # So all previous thread data should be overwritten
@@ -1554,12 +1554,8 @@ class ConnectionState(Generic[ClientT]):
     def parse_guild_scheduled_event_delete(self, data: gw.GuildScheduledEventDeleteEvent) -> None:
         guild = self._get_guild(int(data['guild_id']))
         if guild is not None:
-            try:
-                scheduled_event = guild._scheduled_events.pop(int(data['id']))
-            except KeyError:
-                pass
-            else:
-                self.dispatch('scheduled_event_delete', scheduled_event)
+            scheduled_event = guild._scheduled_events.pop(int(data['id']), ScheduledEvent(state=self, data=data))
+            self.dispatch('scheduled_event_delete', scheduled_event)
         else:
             _log.debug('SCHEDULED_EVENT_DELETE referencing unknown guild ID: %s. Discarding.', data['guild_id'])
 

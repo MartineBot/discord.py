@@ -80,6 +80,14 @@ AppInstallParams
 .. autoclass:: AppInstallParams()
     :members:
 
+IntegrationTypeConfig
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. attributetable:: IntegrationTypeConfig
+
+.. autoclass:: IntegrationTypeConfig()
+    :members:
+
 Team
 ~~~~~
 
@@ -3843,17 +3851,25 @@ of :class:`enum.Enum`.
 
     .. versionadded:: 2.5
 
-    .. attribute:: reply
+    .. attribute:: default
 
-        A message reply.
+        A standard reference used by message replies (:attr:`MessageType.reply`),
+        crossposted messaged created by a followed channel integration, and messages of type:
+
+        - :attr:`MessageType.pins_add`
+        - :attr:`MessageType.channel_follow_add`
+        - :attr:`MessageType.thread_created`
+        - :attr:`MessageType.thread_starter_message`
+        - :attr:`MessageType.poll_result`
+        - :attr:`MessageType.context_menu_command`
 
     .. attribute:: forward
 
         A forwarded message.
 
-    .. attribute:: default
+    .. attribute:: reply
 
-        An alias for :attr:`.reply`.
+        An alias for :attr:`.default`.
 
 .. _discord-api-audit-logs:
 
@@ -5706,6 +5722,14 @@ SKUFlags
 .. attributetable:: SKUFlags
 
 .. autoclass:: SKUFlags()
+    :members:
+
+EmbedFlags
+~~~~~~~~~~
+
+.. attributetable:: EmbedFlags
+
+.. autoclass:: EmbedFlags()
     :members:
 
 ForumTag

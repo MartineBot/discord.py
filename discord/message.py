@@ -610,6 +610,11 @@ class MessageReference:
         .. versionadded:: 2.5
     message_id: Optional[:class:`int`]
         The id of the message referenced.
+        This can be ``None`` when this message reference was retrieved from
+        a system message of one of the following types:
+
+        - :attr:`MessageType.channel_follow_add`
+        - :attr:`MessageType.thread_created`
     channel_id: :class:`int`
         The channel id of the message referenced.
     guild_id: Optional[:class:`int`]
@@ -773,7 +778,7 @@ class MessageInteraction(Hashable):
         self.user: Union[User, Member] = MISSING
 
         try:
-            payload = data['member']
+            payload = data['member']  # pyright: ignore[reportTypedDictNotRequiredAccess]
         except KeyError:
             self.user = state.create_user(data['user'])
         else:
@@ -2010,9 +2015,16 @@ class Message(PartialMessage, Hashable):
         The :class:`TextChannel` or :class:`Thread` that the message was sent from.
         Could be a :class:`DMChannel` or :class:`GroupChannel` if it's a private message.
     reference: Optional[:class:`~discord.MessageReference`]
-        The message that this message references. This is only applicable to messages of
-        type :attr:`MessageType.pins_add`, crossposted messages created by a
-        followed channel integration, or message replies.
+        The message that this message references. This is only applicable to
+        message replies (:attr:`MessageType.reply`), crossposted messages created by
+        a followed channel integration, forwarded messages, and messages of type:
+
+        - :attr:`MessageType.pins_add`
+        - :attr:`MessageType.channel_follow_add`
+        - :attr:`MessageType.thread_created`
+        - :attr:`MessageType.thread_starter_message`
+        - :attr:`MessageType.poll_result`
+        - :attr:`MessageType.context_menu_command`
 
         .. versionadded:: 1.5
 
@@ -2200,7 +2212,8 @@ class Message(PartialMessage, Hashable):
 
         self.poll: Optional[Poll] = None
         try:
-            self.poll = Poll._from_data(data=data['poll'], message=self, state=state)
+            poll = data['poll']  # pyright: ignore[reportTypedDictNotRequiredAccess]
+            self.poll = Poll._from_data(data=poll, message=self, state=state)
         except KeyError:
             pass
 
@@ -2214,7 +2227,7 @@ class Message(PartialMessage, Hashable):
 
         if self.guild is not None:
             try:
-                thread = data['thread']
+                thread = data['thread']  # pyright: ignore[reportTypedDictNotRequiredAccess]
             except KeyError:
                 pass
             else:
@@ -2229,7 +2242,7 @@ class Message(PartialMessage, Hashable):
 
         # deprecated
         try:
-            interaction = data['interaction']
+            interaction = data['interaction']  # pyright: ignore[reportTypedDictNotRequiredAccess]
         except KeyError:
             pass
         else:
@@ -2237,20 +2250,20 @@ class Message(PartialMessage, Hashable):
 
         self.interaction_metadata: Optional[MessageInteractionMetadata] = None
         try:
-            interaction_metadata = data['interaction_metadata']
+            interaction_metadata = data['interaction_metadata']  # pyright: ignore[reportTypedDictNotRequiredAccess]
         except KeyError:
             pass
         else:
             self.interaction_metadata = MessageInteractionMetadata(state=state, guild=self.guild, data=interaction_metadata)
 
         try:
-            ref = data['message_reference']
+            ref = data['message_reference']  # pyright: ignore[reportTypedDictNotRequiredAccess]
         except KeyError:
             self.reference = None
         else:
             self.reference = ref = MessageReference.with_state(state, ref)
             try:
-                resolved = data['referenced_message']
+                resolved = data['referenced_message']  # pyright: ignore[reportTypedDictNotRequiredAccess]
             except KeyError:
                 pass
             else:
@@ -2277,7 +2290,7 @@ class Message(PartialMessage, Hashable):
 
         self.application: Optional[MessageApplication] = None
         try:
-            application = data['application']
+            application = data['application']  # pyright: ignore[reportTypedDictNotRequiredAccess]
         except KeyError:
             pass
         else:
@@ -2285,7 +2298,7 @@ class Message(PartialMessage, Hashable):
 
         self.role_subscription: Optional[RoleSubscriptionInfo] = None
         try:
-            role_subscription = data['role_subscription_data']
+            role_subscription = data['role_subscription_data']  # pyright: ignore[reportTypedDictNotRequiredAccess]
         except KeyError:
             pass
         else:
@@ -2293,7 +2306,7 @@ class Message(PartialMessage, Hashable):
 
         self.purchase_notification: Optional[PurchaseNotification] = None
         try:
-            purchase_notification = data['purchase_notification']
+            purchase_notification = data['purchase_notification']  # pyright: ignore[reportTypedDictNotRequiredAccess]
         except KeyError:
             pass
         else:
@@ -2301,7 +2314,7 @@ class Message(PartialMessage, Hashable):
 
         for handler in ('author', 'member', 'mentions', 'mention_roles', 'components', 'call'):
             try:
-                getattr(self, f'_handle_{handler}')(data[handler])
+                getattr(self, f'_handle_{handler}')(data[handler])  # type: ignore
             except KeyError:
                 continue
 

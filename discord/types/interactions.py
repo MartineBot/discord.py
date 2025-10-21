@@ -36,6 +36,7 @@ from .role import Role
 from .snowflake import Snowflake
 from .user import User
 from .guild import GuildFeature
+from .components import ComponentBase
 
 if TYPE_CHECKING:
     from .message import Message
@@ -85,6 +86,7 @@ class PartialThread(_BasePartialChannel):
     rate_limit_per_user: int
     last_message_id: NotRequired[Optional[Snowflake]]
     flags: NotRequired[int]
+    total_message_sent: int
 
 
 class ResolvedData(TypedDict, total=False):
@@ -203,13 +205,27 @@ class SelectMessageComponentInteractionData(_BaseMessageComponentInteractionData
 MessageComponentInteractionData = Union[ButtonMessageComponentInteractionData, SelectMessageComponentInteractionData]
 
 
-class ModalSubmitTextInputInteractionData(TypedDict):
+class ModalSubmitTextInputInteractionData(ComponentBase):
     type: Literal[4]
     custom_id: str
     value: str
 
 
-ModalSubmitComponentItemInteractionData = ModalSubmitTextInputInteractionData
+class ModalSubmitSelectInteractionData(ComponentBase):
+    type: Literal[3, 5, 6, 7, 8]
+    custom_id: str
+    values: List[str]
+
+
+class ModalSubmitFileUploadInteractionData(ComponentBase):
+    type: Literal[19]
+    custom_id: str
+    values: List[str]
+
+
+ModalSubmitComponentItemInteractionData = Union[
+    ModalSubmitSelectInteractionData, ModalSubmitTextInputInteractionData, ModalSubmitFileUploadInteractionData
+]
 
 
 class ModalSubmitActionRowInteractionData(TypedDict):
@@ -217,12 +233,27 @@ class ModalSubmitActionRowInteractionData(TypedDict):
     components: List[ModalSubmitComponentItemInteractionData]
 
 
-ModalSubmitComponentInteractionData = Union[ModalSubmitActionRowInteractionData, ModalSubmitComponentItemInteractionData]
+class ModalSubmitTextDisplayInteractionData(ComponentBase):
+    type: Literal[10]
+    content: str
+
+
+class ModalSubmitLabelInteractionData(ComponentBase):
+    type: Literal[18]
+    component: ModalSubmitComponentItemInteractionData
+
+
+ModalSubmitComponentInteractionData = Union[
+    ModalSubmitActionRowInteractionData,
+    ModalSubmitTextDisplayInteractionData,
+    ModalSubmitLabelInteractionData,
+]
 
 
 class ModalSubmitInteractionData(TypedDict):
     custom_id: str
     components: List[ModalSubmitComponentInteractionData]
+    resolved: NotRequired[ResolvedData]
 
 
 InteractionData = Union[

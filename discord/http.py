@@ -57,16 +57,16 @@ from .file import File
 from .mentions import AllowedMentions
 from . import __version__, utils
 from .utils import MISSING
+from .flags import MessageFlags
 
 _log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from typing_extensions import Self
 
-    from .ui.view import View
+    from .ui.view import BaseView
     from .embeds import Embed
     from .message import Attachment
-    from .flags import MessageFlags
     from .poll import Poll
 
     from .types import (
@@ -151,7 +151,7 @@ def handle_message_parameters(
     embed: Optional[Embed] = MISSING,
     embeds: Sequence[Embed] = MISSING,
     attachments: Sequence[Union[Attachment, File]] = MISSING,
-    view: Optional[View] = MISSING,
+    view: Optional[BaseView] = MISSING,
     allowed_mentions: Optional[AllowedMentions] = MISSING,
     message_reference: Optional[message.MessageReference] = MISSING,
     stickers: Optional[SnowflakeList] = MISSING,
@@ -194,6 +194,12 @@ def handle_message_parameters(
     if view is not MISSING:
         if view is not None:
             payload['components'] = view.to_components()
+
+            if view.has_components_v2():
+                if flags is not MISSING:
+                    flags.components_v2 = True
+                else:
+                    flags = MessageFlags(components_v2=True)
         else:
             payload['components'] = []
 
@@ -1159,7 +1165,7 @@ class HTTPClient:
     def pin_message(self, channel_id: Snowflake, message_id: Snowflake, reason: Optional[str] = None) -> Response[None]:
         r = Route(
             'PUT',
-            '/channels/{channel_id}/pins/{message_id}',
+            '/channels/{channel_id}/messages/pins/{message_id}',
             channel_id=channel_id,
             message_id=message_id,
         )
@@ -1168,14 +1174,25 @@ class HTTPClient:
     def unpin_message(self, channel_id: Snowflake, message_id: Snowflake, reason: Optional[str] = None) -> Response[None]:
         r = Route(
             'DELETE',
-            '/channels/{channel_id}/pins/{message_id}',
+            '/channels/{channel_id}/messages/pins/{message_id}',
             channel_id=channel_id,
             message_id=message_id,
         )
         return self.request(r, reason=reason)
 
-    def pins_from(self, channel_id: Snowflake) -> Response[List[message.Message]]:
-        return self.request(Route('GET', '/channels/{channel_id}/pins', channel_id=channel_id))
+    def pins_from(
+        self,
+        channel_id: Snowflake,
+        limit: Optional[int] = None,
+        before: Optional[str] = None,
+    ) -> Response[message.ChannelPins]:
+        params = {}
+        if before is not None:
+            params['before'] = before
+        if limit is not None:
+            params['limit'] = limit
+
+        return self.request(Route('GET', '/channels/{channel_id}/messages/pins', channel_id=channel_id), params=params)
 
     # Member management
 
@@ -1237,18 +1254,15 @@ class HTTPClient:
     def edit_profile(self, payload: Dict[str, Any]) -> Response[user.User]:
         return self.request(Route('PATCH', '/users/@me'), json=payload)
 
-    def change_my_nickname(
+    def edit_my_member(
         self,
         guild_id: Snowflake,
-        nickname: str,
         *,
         reason: Optional[str] = None,
-    ) -> Response[member.Nickname]:
-        r = Route('PATCH', '/guilds/{guild_id}/members/@me/nick', guild_id=guild_id)
-        payload = {
-            'nick': nickname,
-        }
-        return self.request(r, json=payload, reason=reason)
+        **fields: Any,
+    ) -> Response[member.MemberWithUser]:
+        r = Route('PATCH', '/guilds/{guild_id}/members/@me', guild_id=guild_id)
+        return self.request(r, json=fields, reason=reason)
 
     def change_nickname(
         self,
@@ -1982,12 +1996,10 @@ class HTTPClient:
         invite_id: str,
         *,
         with_counts: bool = True,
-        with_expiration: bool = True,
         guild_scheduled_event_id: Optional[Snowflake] = None,
     ) -> Response[invite.Invite]:
         params: Dict[str, Any] = {
             'with_counts': int(with_counts),
-            'with_expiration': int(with_expiration),
         }
 
         if guild_scheduled_event_id:
@@ -2011,6 +2023,9 @@ class HTTPClient:
 
     def get_role(self, guild_id: Snowflake, role_id: Snowflake) -> Response[role.Role]:
         return self.request(Route('GET', '/guilds/{guild_id}/roles/{role_id}', guild_id=guild_id, role_id=role_id))
+
+    def get_role_member_counts(self, guild_id: Snowflake) -> Response[Dict[str, int]]:
+        return self.request(Route('GET', '/guilds/{guild_id}/roles/member-counts', guild_id=guild_id))
 
     def edit_role(
         self, guild_id: Snowflake, role_id: Snowflake, *, reason: Optional[str] = None, **fields: Any
@@ -2140,22 +2155,19 @@ class HTTPClient:
     @overload
     def get_scheduled_events(
         self, guild_id: Snowflake, with_user_count: Literal[True]
-    ) -> Response[List[scheduled_event.GuildScheduledEventWithUserCount]]:
-        ...
+    ) -> Response[List[scheduled_event.GuildScheduledEventWithUserCount]]: ...
 
     @overload
     def get_scheduled_events(
         self, guild_id: Snowflake, with_user_count: Literal[False]
-    ) -> Response[List[scheduled_event.GuildScheduledEvent]]:
-        ...
+    ) -> Response[List[scheduled_event.GuildScheduledEvent]]: ...
 
     @overload
     def get_scheduled_events(
         self, guild_id: Snowflake, with_user_count: bool
     ) -> Union[
         Response[List[scheduled_event.GuildScheduledEventWithUserCount]], Response[List[scheduled_event.GuildScheduledEvent]]
-    ]:
-        ...
+    ]: ...
 
     def get_scheduled_events(self, guild_id: Snowflake, with_user_count: bool) -> Response[Any]:
         params = {'with_user_count': int(with_user_count)}
@@ -2184,20 +2196,19 @@ class HTTPClient:
     @overload
     def get_scheduled_event(
         self, guild_id: Snowflake, guild_scheduled_event_id: Snowflake, with_user_count: Literal[True]
-    ) -> Response[scheduled_event.GuildScheduledEventWithUserCount]:
-        ...
+    ) -> Response[scheduled_event.GuildScheduledEventWithUserCount]: ...
 
     @overload
     def get_scheduled_event(
         self, guild_id: Snowflake, guild_scheduled_event_id: Snowflake, with_user_count: Literal[False]
-    ) -> Response[scheduled_event.GuildScheduledEvent]:
-        ...
+    ) -> Response[scheduled_event.GuildScheduledEvent]: ...
 
     @overload
     def get_scheduled_event(
         self, guild_id: Snowflake, guild_scheduled_event_id: Snowflake, with_user_count: bool
-    ) -> Union[Response[scheduled_event.GuildScheduledEventWithUserCount], Response[scheduled_event.GuildScheduledEvent]]:
-        ...
+    ) -> Union[
+        Response[scheduled_event.GuildScheduledEventWithUserCount], Response[scheduled_event.GuildScheduledEvent]
+    ]: ...
 
     def get_scheduled_event(
         self, guild_id: Snowflake, guild_scheduled_event_id: Snowflake, with_user_count: bool
@@ -2267,8 +2278,7 @@ class HTTPClient:
         with_member: Literal[True],
         before: Optional[Snowflake] = ...,
         after: Optional[Snowflake] = ...,
-    ) -> Response[scheduled_event.ScheduledEventUsersWithMember]:
-        ...
+    ) -> Response[scheduled_event.ScheduledEventUsersWithMember]: ...
 
     @overload
     def get_scheduled_event_users(
@@ -2279,8 +2289,7 @@ class HTTPClient:
         with_member: Literal[False],
         before: Optional[Snowflake] = ...,
         after: Optional[Snowflake] = ...,
-    ) -> Response[scheduled_event.ScheduledEventUsers]:
-        ...
+    ) -> Response[scheduled_event.ScheduledEventUsers]: ...
 
     @overload
     def get_scheduled_event_users(
@@ -2291,8 +2300,7 @@ class HTTPClient:
         with_member: bool,
         before: Optional[Snowflake] = ...,
         after: Optional[Snowflake] = ...,
-    ) -> Union[Response[scheduled_event.ScheduledEventUsersWithMember], Response[scheduled_event.ScheduledEventUsers]]:
-        ...
+    ) -> Union[Response[scheduled_event.ScheduledEventUsersWithMember], Response[scheduled_event.ScheduledEventUsers]]: ...
 
     def get_scheduled_event_users(
         self,
@@ -2675,7 +2683,6 @@ class HTTPClient:
         mode: Optional[onboarding.OnboardingMode] = None,
         reason: Optional[str],
     ) -> Response[onboarding.Onboarding]:
-
         payload = {}
 
         if prompts is not None:

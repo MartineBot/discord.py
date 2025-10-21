@@ -75,12 +75,18 @@ __all__ = (
     'EntitlementType',
     'EntitlementOwnerType',
     'PollLayoutType',
+    'InviteType',
+    'ReactionType',
     'VoiceChannelEffectAnimationType',
     'SubscriptionStatus',
     'MessageReferenceType',
     'StatusDisplayType',
     'OnboardingPromptType',
     'OnboardingMode',
+    'SeparatorSpacing',
+    'MediaItemLoadingState',
+    'CollectibleType',
+    'NameplatePalette',
 )
 
 
@@ -174,7 +180,7 @@ class EnumMeta(type):
         try:
             return cls._enum_value_map_[value]
         except (KeyError, TypeError):
-            raise ValueError(f"{value!r} is not a valid {cls.__name__}")
+            raise ValueError(f'{value!r} is not a valid {cls.__name__}')
 
     def __getitem__(cls, key: str) -> Any:
         return cls._enum_member_map_[key]
@@ -271,6 +277,17 @@ class MessageType(Enum):
     guild_incident_report_false_alarm = 39
     purchase_notification = 44
     poll_result = 46
+    emoji_added = 63
+
+    def is_deletable(self) -> bool:
+        return self not in {
+            MessageType.recipient_add,
+            MessageType.recipient_remove,
+            MessageType.call,
+            MessageType.channel_name_change,
+            MessageType.channel_icon_change,
+            MessageType.thread_starter_message,
+        }
 
 
 class SpeakingState(Enum):
@@ -486,7 +503,7 @@ class AuditLogAction(Enum):
             AuditLogAction.home_settings_update:                     AuditLogActionCategory.update,
         }
         # fmt: on
-        return lookup[self]
+        return lookup.get(self, None)
 
     @property
     def target_type(self) -> Optional[str]:
@@ -668,6 +685,15 @@ class ComponentType(Enum):
     role_select = 6
     mentionable_select = 7
     channel_select = 8
+    section = 9
+    text_display = 10
+    thumbnail = 11
+    media_gallery = 12
+    file = 13
+    separator = 14
+    container = 17
+    label = 18
+    file_upload = 19
 
     def __int__(self) -> int:
         return self.value
@@ -795,13 +821,6 @@ class Locale(Enum):
 
     @property
     def language_code(self) -> str:
-        """:class:`str`: Returns the locale's BCP 47 language code in the format of ``language-COUNTRY``.
-
-        This is derived from a predefined mapping based on Discord's supported locales.
-        If no mapping exists for the current locale, this returns the raw locale value as a fallback.
-
-        .. versionadded:: 2.6
-        """
         return _UNICODE_LANG_MAP.get(self.value, self.value)
 
 
@@ -951,6 +970,36 @@ class OnboardingPromptType(Enum):
 class OnboardingMode(Enum):
     default = 0
     advanced = 1
+
+
+class SeparatorSpacing(Enum):
+    small = 1
+    large = 2
+
+
+class MediaItemLoadingState(Enum):
+    unknown = 0
+    loading = 1
+    loaded = 2
+    not_found = 3
+
+
+class CollectibleType(Enum):
+    nameplate = 'nameplate'
+
+
+class NameplatePalette(Enum):
+    crimson = 'crimson'
+    berry = 'berry'
+    sky = 'sky'
+    teal = 'teal'
+    forest = 'forest'
+    bubble_gum = 'bubble_gum'
+    violet = 'violet'
+    cobalt = 'cobalt'
+    clover = 'clover'
+    lemon = 'lemon'
+    white = 'white'
 
 
 def create_unknown_value(cls: Type[E], val: Any) -> E:

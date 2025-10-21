@@ -135,6 +135,7 @@ class Modal(BaseView):
         title: str = MISSING,
         timeout: Optional[float] = None,
         custom_id: str = MISSING,
+        clear_dynamic_items: bool = True,
     ) -> None:
         if title is MISSING and getattr(self, 'title', MISSING) is MISSING:
             raise ValueError('Modal must have a title')
@@ -142,7 +143,7 @@ class Modal(BaseView):
             self.title = title
         self.custom_id: str = os.urandom(16).hex() if custom_id is MISSING else custom_id
 
-        super().__init__(timeout=timeout)
+        super().__init__(timeout=timeout, clear_dynamic_items=clear_dynamic_items)
 
     async def on_submit(self, interaction: Interaction[ClientT], /) -> None:
         """|coro|

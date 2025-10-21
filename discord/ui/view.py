@@ -714,8 +714,8 @@ class View(BaseView):
 
         cls.__view_children_items__ = children
 
-    def __init__(self, *, timeout: Optional[float] = 180.0):
-        super().__init__(timeout=timeout)
+    def __init__(self, *, timeout: Optional[float] = 180.0, clear_dynamic_items: bool = True) -> None:
+        super().__init__(timeout=timeout, clear_dynamic_items=clear_dynamic_items)
         self.__weights = _ViewWeights(self._children)
 
     def to_components(self) -> List[Dict[str, Any]]:
@@ -794,8 +794,8 @@ class LayoutView(BaseView):
         @classmethod
         def from_message(cls, message: Message, /, *, timeout: Optional[float] = 180.0) -> LayoutView: ...
 
-    def __init__(self, *, timeout: Optional[float] = 180.0) -> None:
-        super().__init__(timeout=timeout)
+    def __init__(self, *, timeout: Optional[float] = 180.0, clear_dynamic_items: bool = True) -> None:
+        super().__init__(timeout=timeout, clear_dynamic_items=clear_dynamic_items)
 
         if self._total_children > 40:
             raise ValueError('maximum number of children exceeded (40)')

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import inspect
 import logging
 from typing import (
     TYPE_CHECKING,
@@ -358,11 +359,19 @@ class Client:
 
     # internals
 
-    def _get_websocket(self, guild_id: Optional[int] = None, *, shard_id: Optional[int] = None) -> DiscordWebSocket:
+    def _get_websocket(
+        self, guild_id: Optional[int] = None, *, shard_id: Optional[int] = None
+    ) -> DiscordWebSocket:
         return self.ws
 
     def _get_state(self, **options: Any) -> ConnectionState[Self]:
-        return ConnectionState(dispatch=self.dispatch, handlers=self._handlers, hooks=self._hooks, http=self.http, **options)
+        return ConnectionState(
+            dispatch=self.dispatch,
+            handlers=self._handlers,
+            hooks=self._hooks,
+            http=self.http,
+            **options,
+        )
 
     def _handle_ready(self) -> None:
         self._ready.set()
@@ -579,13 +588,17 @@ class Client:
 
     # hooks
 
-    async def _call_before_identify_hook(self, shard_id: Optional[int], *, initial: bool = False) -> None:
+    async def _call_before_identify_hook(
+        self, shard_id: Optional[int], *, initial: bool = False
+    ) -> None:
         # This hook is an internal hook that actually calls the public one.
         # It allows the library to have its own hook without stepping on the
         # toes of those who need to override their own hook.
         await self.before_identify_hook(shard_id, initial=initial)
 
-    async def before_identify_hook(self, shard_id: Optional[int], *, initial: bool = False) -> None:
+    async def before_identify_hook(
+        self, shard_id: Optional[int], *, initial: bool = False
+    ) -> None:
         """|coro|
 
         A hook that is called before IDENTIFYing a session. This is useful
@@ -669,7 +682,9 @@ class Client:
             await self._async_setup_hook()
 
         if not isinstance(token, str):
-            raise TypeError(f'expected token to be a str, received {token.__class__.__name__} instead')
+            raise TypeError(
+                f'expected token to be a str, received {token.__class__.__name__} instead'
+            )
         token = token.strip()
 
         data = await self.http.static_login(token)
@@ -728,7 +743,9 @@ class Client:
             except ReconnectWebSocket as e:
                 _log.debug('Got a request to %s the websocket.', e.op)
                 self.dispatch('disconnect')
-                ws_params.update(sequence=self.ws.sequence, resume=e.resume, session=self.ws.session_id)
+                ws_params.update(
+                    sequence=self.ws.sequence, resume=e.resume, session=self.ws.session_id
+                )
                 if e.resume:
                     ws_params['gateway'] = self.ws.gateway
                 continue
@@ -989,7 +1006,9 @@ class Client:
         if value is None or isinstance(value, AllowedMentions):
             self._connection.allowed_mentions = value
         else:
-            raise TypeError(f'allowed_mentions must be AllowedMentions not {value.__class__.__name__}')
+            raise TypeError(
+                f'allowed_mentions must be AllowedMentions not {value.__class__.__name__}'
+            )
 
     @property
     def intents(self) -> Intents:
@@ -1246,7 +1265,9 @@ class Client:
         event: Literal['app_command_completion'],
         /,
         *,
-        check: Optional[Callable[[Interaction[Self], Union[Command[Any, ..., Any], ContextMenu]], bool]] = ...,
+        check: Optional[
+            Callable[[Interaction[Self], Union[Command[Any, ..., Any], ContextMenu]], bool]
+        ] = ...,
         timeout: Optional[float] = ...,
     ) -> Tuple[Interaction[Self], Union[Command[Any, ..., Any], ContextMenu]]: ...
 
@@ -1335,7 +1356,9 @@ class Client:
         event: Literal['typing'],
         /,
         *,
-        check: Optional[Callable[[Messageable, Union[User, Member], datetime.datetime], bool]] = ...,
+        check: Optional[
+            Callable[[Messageable, Union[User, Member], datetime.datetime], bool]
+        ] = ...,
         timeout: Optional[float] = ...,
     ) -> Tuple[Messageable, Union[User, Member], datetime.datetime]: ...
 
@@ -1445,7 +1468,9 @@ class Client:
         event: Literal['guild_stickers_update'],
         /,
         *,
-        check: Optional[Callable[[Guild, Sequence[GuildSticker], Sequence[GuildSticker]], bool]] = ...,
+        check: Optional[
+            Callable[[Guild, Sequence[GuildSticker], Sequence[GuildSticker]], bool]
+        ] = ...,
         timeout: Optional[float] = ...,
     ) -> Tuple[Guild, Sequence[GuildSticker], Sequence[GuildSticker]]: ...
 
@@ -2052,7 +2077,7 @@ class Client:
             The coroutine passed is not actually a coroutine.
         """
 
-        if not asyncio.iscoroutinefunction(coro):
+        if not inspect.iscoroutinefunction(coro):
             raise TypeError('event registered must be a coroutine function')
 
         setattr(self, coro.__name__, coro)
@@ -2196,7 +2221,9 @@ class Client:
             The guild with the guild data parsed.
         """
 
-        async def _before_strategy(retrieve: int, before: Optional[Snowflake], limit: Optional[int]):
+        async def _before_strategy(
+            retrieve: int, before: Optional[Snowflake], limit: Optional[int]
+        ):
             before_id = before.id if before else None
             data = await self.http.get_guilds(retrieve, before=before_id, with_counts=with_counts)
 
@@ -2500,7 +2527,9 @@ class Client:
         resolved = utils.resolve_invite(url)
 
         if scheduled_event_id and resolved.event:
-            raise ValueError('Cannot specify scheduled_event_id and contain an event_id in the url.')
+            raise ValueError(
+                'Cannot specify scheduled_event_id and contain an event_id in the url.'
+            )
 
         scheduled_event_id = scheduled_event_id or resolved.event
 
@@ -2511,7 +2540,9 @@ class Client:
         )
         return Invite.from_incomplete(state=self._connection, data=data)
 
-    async def delete_invite(self, invite: Union[Invite, str], /, *, reason: Optional[str]) -> Invite:
+    async def delete_invite(
+        self, invite: Union[Invite, str], /, *, reason: Optional[str]
+    ) -> Invite:
         """|coro|
 
         Revokes an :class:`.Invite`, URL, or ID to an invite.
@@ -2633,7 +2664,9 @@ class Client:
         data = await self.http.get_user(user_id)
         return User(state=self._connection, data=data)
 
-    async def fetch_channel(self, channel_id: int, /) -> Union[GuildChannel, PrivateChannel, Thread]:
+    async def fetch_channel(
+        self, channel_id: int, /
+    ) -> Union[GuildChannel, PrivateChannel, Thread]:
         """|coro|
 
         Retrieves a :class:`.abc.GuildChannel`, :class:`.abc.PrivateChannel`, or :class:`.Thread` with the specified ID.
@@ -2873,7 +2906,9 @@ class Client:
         # This endpoint paginates in ascending order.
         endpoint = self.http.get_entitlements
 
-        async def _before_strategy(retrieve: int, before: Optional[Snowflake], limit: Optional[int]):
+        async def _before_strategy(
+            retrieve: int, before: Optional[Snowflake], limit: Optional[int]
+        ):
             before_id = before.id if before else None
             data = await endpoint(
                 self.application_id,  # type: ignore  # We already check for None above
@@ -3147,7 +3182,9 @@ class Client:
             raise TypeError(f'expected an instance of View not {view.__class__.__name__}')
 
         if not view.is_persistent():
-            raise ValueError('View is not persistent. Items need to have a custom_id set and View must have no timeout')
+            raise ValueError(
+                'View is not persistent. Items need to have a custom_id set and View must have no timeout'
+            )
 
         if view.is_finished():
             raise ValueError('View is already finished.')
@@ -3254,4 +3291,6 @@ class Client:
             raise MissingApplicationID
 
         data = await self.http.get_application_emojis(self.application_id)
-        return [Emoji(guild=Object(0), state=self._connection, data=emoji) for emoji in data['items']]
+        return [
+            Emoji(guild=Object(0), state=self._connection, data=emoji) for emoji in data['items']
+        ]

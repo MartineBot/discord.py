@@ -80,7 +80,13 @@ if TYPE_CHECKING:
         MaybeAwaitableFunc,
     )
     from .core import Command
-    from .hybrid import CommandCallback, ContextT, P, _HybridCommandDecoratorKwargs, _HybridGroupDecoratorKwargs
+    from .hybrid import (
+        CommandCallback,
+        ContextT,
+        P,
+        _HybridCommandDecoratorKwargs,
+        _HybridGroupDecoratorKwargs,
+    )
     from discord.client import _ClientOptions
     from discord.shard import _AutoShardedClientOptions
 
@@ -208,7 +214,9 @@ class BotBase(GroupMixin[None]):
             raise TypeError('Both owner_id and owner_ids are set.')
 
         if self.owner_ids and not isinstance(self.owner_ids, collections.abc.Collection):
-            raise TypeError(f'owner_ids must be a collection not {self.owner_ids.__class__.__name__}')
+            raise TypeError(
+                f'owner_ids must be a collection not {self.owner_ids.__class__.__name__}'
+            )
 
         if help_command is _default:
             self.help_command = DefaultHelpCommand()
@@ -232,7 +240,9 @@ class BotBase(GroupMixin[None]):
                 or (isinstance(prefix, collections.abc.Iterable) and len(list(prefix)) >= 1)
             )
             if trigger_warning:
-                _log.warning('Privileged message content intent is missing, commands may not work as expected.')
+                _log.warning(
+                    'Privileged message content intent is missing, commands may not work as expected.'
+                )
 
     def dispatch(self, event_name: str, /, *args: Any, **kwargs: Any) -> None:
         # super() will resolve to Client
@@ -337,7 +347,9 @@ class BotBase(GroupMixin[None]):
 
     # Error handler
 
-    async def on_command_error(self, context: Context[BotT], exception: errors.CommandError, /) -> None:
+    async def on_command_error(
+        self, context: Context[BotT], exception: errors.CommandError, /
+    ) -> None:
         """|coro|
 
         The default command error handler provided by the bot.
@@ -581,7 +593,7 @@ class BotBase(GroupMixin[None]):
         TypeError
             The coroutine passed is not actually a coroutine.
         """
-        if not asyncio.iscoroutinefunction(coro):
+        if not inspect.iscoroutinefunction(coro):
             raise TypeError('The pre-invoke hook must be a coroutine.')
 
         self._before_invoke = coro
@@ -618,7 +630,7 @@ class BotBase(GroupMixin[None]):
         TypeError
             The coroutine passed is not actually a coroutine.
         """
-        if not asyncio.iscoroutinefunction(coro):
+        if not inspect.iscoroutinefunction(coro):
             raise TypeError('The post-invoke hook must be a coroutine.')
 
         self._after_invoke = coro
@@ -654,7 +666,7 @@ class BotBase(GroupMixin[None]):
         """
         name = func.__name__ if name is MISSING else name
 
-        if not asyncio.iscoroutinefunction(func):
+        if not inspect.iscoroutinefunction(func):
             raise TypeError('Listeners must be coroutines')
 
         if name in self.extra_events:
@@ -805,7 +817,9 @@ class BotBase(GroupMixin[None]):
             await self.remove_cog(cog_name, guild=guild, guilds=guilds)
 
         if cog.__cog_app_commands_group__:
-            self.__tree.add_command(cog.__cog_app_commands_group__, override=override, guild=guild, guilds=guilds)
+            self.__tree.add_command(
+                cog.__cog_app_commands_group__, override=override, guild=guild, guilds=guilds
+            )
 
         cog = await cog._inject(self, override=override, guild=guild, guilds=guilds)
         self.__cogs[cog_name] = cog

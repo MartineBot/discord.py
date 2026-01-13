@@ -56,6 +56,8 @@ from typing import (
     TYPE_CHECKING,
 )
 import unicodedata
+import collections.abc
+from itertools import islice
 from base64 import b64encode, b64decode
 from bisect import bisect_left
 import datetime
@@ -81,19 +83,20 @@ except ModuleNotFoundError:
 else:
     HAS_ORJSON = True
 
+_ZSTD_SOURCE: Literal['zstandard', 'compression.zstd'] | None = None
+
 try:
     from zstandard import ZstdDecompressor  # type: ignore
 
-    _HAS_ZSTD = True
+    _ZSTD_SOURCE = 'zstandard'
 except ImportError:
     try:
         from compression.zstd import ZstdDecompressor  # type: ignore
+
+        _ZSTD_SOURCE = 'compression.zstd'
     except ImportError:
         import zlib
 
-        _HAS_ZSTD = False
-    else:
-        _HAS_ZSTD = True
 
 __all__ = (
     'oauth_url',
@@ -433,7 +436,7 @@ def time_snowflake(dt: datetime.datetime, /, *, high: bool = False) -> int:
 
 
 def _find(predicate: Callable[[T], Any], iterable: Iterable[T], /) -> Optional[T]:
-    return next((element for element in iterable if predicate(element)), None)
+    return next(filter(predicate, iterable), None)
 
 
 async def _afind(predicate: Callable[[T], Any], iterable: AsyncIterable[T], /) -> Optional[T]:
@@ -1036,17 +1039,18 @@ def escape_mentions(text: str) -> str:
 
 
 def _chunk(iterator: Iterable[T], max_size: int) -> Iterator[List[T]]:
-    ret = []
-    n = 0
-    for item in iterator:
-        ret.append(item)
-        n += 1
-        if n == max_size:
-            yield ret
-            ret = []
-            n = 0
-    if ret:
-        yield ret
+    # Specialise iterators that can be sliced as it is much faster
+    if isinstance(iterator, collections.abc.Sequence):
+        for i in range(0, len(iterator), max_size):
+            yield list(iterator[i : i + max_size])
+    else:
+        # Fallback to slower path
+        iterator = iter(iterator)
+        while True:
+            batch = list(islice(iterator, max_size))
+            if not batch:
+                break
+            yield batch
 
 
 async def _achunk(iterator: AsyncIterable[T], max_size: int) -> AsyncIterator[List[T]]:
@@ -1223,7 +1227,7 @@ def is_inside_class(func: Callable[..., Any]) -> bool:
     return not remaining.endswith('<locals>')
 
 
-TimestampStyle = Literal['f', 'F', 'd', 'D', 't', 'T', 'R']
+TimestampStyle = Literal['f', 'F', 'd', 'D', 't', 'T', 's', 'S', 'R']
 
 
 def format_dt(dt: datetime.datetime, /, style: Optional[TimestampStyle] = None) -> str:
@@ -1231,23 +1235,27 @@ def format_dt(dt: datetime.datetime, /, style: Optional[TimestampStyle] = None) 
 
     This allows for a locale-independent way of presenting data using Discord specific Markdown.
 
-    +-------------+----------------------------+-----------------+
-    |    Style    |       Example Output       |   Description   |
-    +=============+============================+=================+
-    | t           | 22:57                      | Short Time      |
-    +-------------+----------------------------+-----------------+
-    | T           | 22:57:58                   | Long Time       |
-    +-------------+----------------------------+-----------------+
-    | d           | 17/05/2016                 | Short Date      |
-    +-------------+----------------------------+-----------------+
-    | D           | 17 May 2016                | Long Date       |
-    +-------------+----------------------------+-----------------+
-    | f (default) | 17 May 2016 22:57          | Short Date Time |
-    +-------------+----------------------------+-----------------+
-    | F           | Tuesday, 17 May 2016 22:57 | Long Date Time  |
-    +-------------+----------------------------+-----------------+
-    | R           | 5 years ago                | Relative Time   |
-    +-------------+----------------------------+-----------------+
+    +-------------+--------------------------------+-------------------------+
+    |    Style    |        Example Output          |       Description       |
+    +=============+================================+=========================+
+    | t           | 22:57                          | Short Time              |
+    +-------------+--------------------------------+-------------------------+
+    | T           | 22:57:58                       | Medium Time             |
+    +-------------+--------------------------------+-------------------------+
+    | d           | 17/05/2016                     | Short Date              |
+    +-------------+--------------------------------+-------------------------+
+    | D           | May 17, 2016                   | Long Date               |
+    +-------------+--------------------------------+-------------------------+
+    | f (default) | May 17, 2016 at 22:57          | Long Date, Short Time   |
+    +-------------+--------------------------------+-------------------------+
+    | F           | Tuesday, May 17, 2016 at 22:57 | Full Date, Short Time   |
+    +-------------+--------------------------------+-------------------------+
+    | s           | 17/05/2016, 22:57              | Short Date, Short Time  |
+    +-------------+--------------------------------+-------------------------+
+    | S           | 17/05/2016, 22:57:58           | Short Date, Medium Time |
+    +-------------+--------------------------------+-------------------------+
+    | R           | 5 years ago                    | Relative Time           |
+    +-------------+--------------------------------+-------------------------+
 
     Note that the exact output depends on the user's locale setting in the client. The example output
     presented is using the ``en-GB`` locale.
@@ -1428,7 +1436,7 @@ def _human_join(seq: Sequence[str], /, *, delimiter: str = ', ', final: str = 'o
     return delimiter.join(seq[:-1]) + f' {final} {seq[-1]}'
 
 
-if _HAS_ZSTD:
+if _ZSTD_SOURCE is not None:
 
     class _ZstdDecompressionContext:
         __slots__ = ('decompressor',)
@@ -1437,6 +1445,12 @@ if _HAS_ZSTD:
 
         def __init__(self) -> None:
             self.decompressor = ZstdDecompressor()
+            if _ZSTD_SOURCE == 'zstandard':
+                # The default API for zstandard requires a size hint when
+                # the size is not included in the zstandard frame.
+                # This constructs an instance of zstandard.ZstdDecompressionObj
+                # which dynamically allocates a buffer, matching stdlib module's behavior.
+                self.decompressor = self.decompressor.decompressobj()
 
         def decompress(self, data: bytes, /) -> str | None:
             # Each WS message is a complete gateway message

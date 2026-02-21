@@ -128,9 +128,8 @@ def test_valid_icon_size():
 @pytest.mark.parametrize(
     ('url', 'code'),
     [
-        ('https://discordapp.com/invite/dpy', 'dpy'),
-        ('https://discord.com/invite/dpy', 'dpy'),
-        ('https://discord.gg/dpy', 'dpy'),
+        ('https://web.fluxer.app/invite/dpy', 'dpy'),
+        ('https://fluxer.gg/dpy', 'dpy'),
     ],
 )
 def test_resolve_invite(url, code):
@@ -140,12 +139,10 @@ def test_resolve_invite(url, code):
 @pytest.mark.parametrize(
     ('url', 'event_id'),
     [
-        ('https://discordapp.com/invite/dpy', None),
-        ('https://discord.com/invite/dpy', None),
-        ('https://discord.gg/dpy', None),
-        ('https://discordapp.com/invite/dpy?event=22222222', 22222222),
-        ('https://discord.com/invite/dpy?event=4098', 4098),
-        ('https://discord.gg/dpy?event=727', 727),
+        ('https://web.fluxer.app/invite/dpy', None),
+        ('https://fluxer.gg/dpy', None),
+        ('https://web.fluxer.app/invite/dpy?event=22222222', 22222222),
+        ('https://fluxer.gg/dpy?event=727', 727),
     ],
 )
 def test_resolve_invite_event(url, event_id: typing.Optional[int]):
@@ -155,9 +152,7 @@ def test_resolve_invite_event(url, event_id: typing.Optional[int]):
 @pytest.mark.parametrize(
     ('url', 'code'),
     [
-        ('https://discordapp.com/template/foobar', 'foobar'),
-        ('https://discord.com/template/foobar', 'foobar'),
-        ('https://discord.new/foobar', 'foobar'),
+        ('https://web.fluxer.app/template/foobar', 'foobar'),
     ],
 )
 def test_resolve_template(url, code):

@@ -196,12 +196,14 @@ class AppInfo:
         self.rpc_origins: Optional[List[str]] = data.get('rpc_origins')
         self.bot_public: bool = data['bot_public']
         self.bot_require_code_grant: bool = data['bot_require_code_grant']
-        self.owner: User = state.create_user(data['owner'])
+        self.owner: Optional[User] = None
+        if 'owner' in data:
+            self.owner = state.create_user(data['owner'])
 
         team: Optional[TeamPayload] = data.get('team')
         self.team: Optional[Team] = Team(state, team) if team else None
 
-        self.verify_key: str = data['verify_key']
+        self.verify_key: str = data.get('verify_key', '')
 
         self.guild_id: Optional[int] = utils._get_as_snowflake(data, 'guild_id')
 

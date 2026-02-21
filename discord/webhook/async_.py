@@ -995,7 +995,8 @@ class BaseWebhook(Hashable):
 
     def _update(self, data: WebhookPayload) -> None:
         self.id: int = int(data['id'])
-        self.type: WebhookType = try_enum(WebhookType, int(data['type']))
+        # Fluxer only has one webhook type so far and this key does not exist
+        self.type: WebhookType = try_enum(WebhookType, int(data.get('type', WebhookType.incoming.value)))
         self.channel_id: Optional[int] = utils._get_as_snowflake(data, 'channel_id')
         self.guild_id: Optional[int] = utils._get_as_snowflake(data, 'guild_id')
         self.name: Optional[str] = data.get('name')
@@ -1189,7 +1190,7 @@ class Webhook(BaseWebhook):
     @property
     def url(self) -> str:
         """:class:`str` : Returns the webhook's url."""
-        return f'https://discord.com/api/webhooks/{self.id}/{self.token}'
+        return f'https://api.fluxer.app/webhooks/{self.id}/{self.token}'
 
     @classmethod
     def partial(
@@ -1305,7 +1306,7 @@ class Webhook(BaseWebhook):
             A partial :class:`Webhook`.
             A partial webhook is just a webhook object with an ID and a token.
         """
-        m = re.search(r'discord(?:app)?\.com/api/webhooks/(?P<id>[0-9]{17,20})/(?P<token>[A-Za-z0-9\.\-\_]{60,})', url)
+        m = re.search(r'api\.fluxer\.app/webhooks/(?P<id>[0-9]{17,20})/(?P<token>[A-Za-z0-9\.\-\_]{60,})', url)
         if m is None:
             raise ValueError('Invalid webhook URL given.')
 

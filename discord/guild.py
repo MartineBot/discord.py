@@ -4537,7 +4537,12 @@ class Guild(Hashable):
         )
 
     async def change_voice_state(
-        self, *, channel: Optional[abc.Snowflake], self_mute: bool = False, self_deaf: bool = False
+        self,
+        *,
+        channel: Optional[abc.Snowflake],
+        connection_id: Optional[str],
+        self_mute: bool = False,
+        self_deaf: bool = False,
     ) -> None:
         """|coro|
 
@@ -4549,6 +4554,8 @@ class Guild(Hashable):
         -----------
         channel: Optional[:class:`abc.Snowflake`]
             Channel the client wants to join. Use ``None`` to disconnect.
+        connection_id: Optional[:class:`str`]
+            An ID of the connection to change the voice state of. Use ``None`` to create a new connection.
         self_mute: :class:`bool`
             Indicates if the client should be self-muted.
         self_deaf: :class:`bool`
@@ -4556,7 +4563,7 @@ class Guild(Hashable):
         """
         ws = self._state._get_websocket(self.id)
         channel_id = channel.id if channel else None
-        await ws.voice_state(self.id, channel_id, self_mute, self_deaf)
+        await ws.voice_state(self.id, channel_id, connection_id, self_mute, self_deaf)
 
     async def fetch_automod_rule(self, automod_rule_id: int, /) -> AutoModRule:
         """|coro|

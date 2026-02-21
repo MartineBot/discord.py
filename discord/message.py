@@ -32,7 +32,6 @@ from os import PathLike
 from typing import (
     Dict,
     TYPE_CHECKING,
-    Literal,
     Sequence,
     Union,
     List,
@@ -513,12 +512,12 @@ class MessageSnapshot:
     def _from_value(
         cls,
         state: ConnectionState,
-        message_snapshots: Optional[List[Dict[Literal['message'], MessageSnapshotPayload]]],
+        message_snapshots: Optional[List[MessageSnapshotPayload]],
     ) -> List[Self]:
         if not message_snapshots:
             return []
 
-        return [cls(state, snapshot['message']) for snapshot in message_snapshots]
+        return [cls(state, snapshot) for snapshot in message_snapshots]
 
     def __init__(self, state: ConnectionState, data: MessageSnapshotPayload):
         self.type: MessageType = try_enum(MessageType, data['type'])
@@ -526,9 +525,11 @@ class MessageSnapshot:
         self.embeds: List[Embed] = [Embed.from_dict(a) for a in data['embeds']]
         self.attachments: List[Attachment] = [Attachment(data=a, state=state) for a in data['attachments']]
         self.created_at: datetime.datetime = utils.parse_time(data['timestamp'])
-        self._edited_timestamp: Optional[datetime.datetime] = utils.parse_time(data['edited_timestamp'])
+        # this attribute is only sent by Fluxer, if it's not empty
+        self._edited_timestamp: Optional[datetime.datetime] = utils.parse_time(data.get('edited_timestamp'))
         self.flags: MessageFlags = MessageFlags._from_value(data.get('flags', 0))
-        self.stickers: List[StickerItem] = [StickerItem(data=d, state=state) for d in data.get('sticker_items', [])]
+        # Fluxer uses 'stickers' instead of 'sticker_items'
+        self.stickers: List[StickerItem] = [StickerItem(data=d, state=state) for d in data.get('stickers', [])]
 
         self.components: List[MessageComponentType] = []
         for component_data in data.get('components', []):
@@ -719,7 +720,7 @@ class MessageReference:
         .. versionadded:: 1.7
         """
         guild_id = self.guild_id if self.guild_id is not None else '@me'
-        return f'https://discord.com/channels/{guild_id}/{self.channel_id}/{self.message_id}'
+        return f'https://fluxer.app/channels/{guild_id}/{self.channel_id}/{self.message_id}'
 
     def __repr__(self) -> str:
         return f'<MessageReference message_id={self.message_id!r} channel_id={self.channel_id!r} guild_id={self.guild_id!r}>'
@@ -1229,7 +1230,7 @@ class PartialMessage(Hashable):
     def jump_url(self) -> str:
         """:class:`str`: Returns a URL that allows the client to jump to this message."""
         guild_id = getattr(self.guild, 'id', '@me')
-        return f'https://discord.com/channels/{guild_id}/{self.channel.id}/{self.id}'
+        return f'https://fluxer.app/channels/{guild_id}/{self.channel.id}/{self.id}'
 
     @property
     def thread(self) -> Optional[Thread]:
@@ -2219,7 +2220,8 @@ class Message(PartialMessage, Hashable):
         self.nonce: Optional[Union[int, str]] = data.get('nonce')
         self.position: Optional[int] = data.get('position')
         self.application_id: Optional[int] = utils._get_as_snowflake(data, 'application_id')
-        self.stickers: List[StickerItem] = [StickerItem(data=d, state=state) for d in data.get('sticker_items', [])]
+        # Fluxer uses 'stickers' instead of 'sticker_items'
+        self.stickers: List[StickerItem] = [StickerItem(data=d, state=state) for d in data.get('stickers', [])]
         self.message_snapshots: List[MessageSnapshot] = MessageSnapshot._from_value(state, data.get('message_snapshots'))
         self.call: Optional[CallMessage] = None
         # Set by Messageable.pins
@@ -2326,6 +2328,12 @@ class Message(PartialMessage, Hashable):
             pass
         else:
             self.purchase_notification = PurchaseNotification(purchase_notification)
+
+        # these attributes are only sent by Fluxer when they're not empty
+        self.mentions = []
+        self.role_mentions = []
+        self.components = []
+        self.call: Optional[CallMessage] = None
 
         for handler in ('author', 'member', 'mentions', 'mention_roles', 'components', 'call'):
             try:

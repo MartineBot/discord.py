@@ -200,11 +200,19 @@ class StickerItem(_StickerTag):
         self._state: ConnectionState = state
         self.name: str = data['name']
         self.id: int = int(data['id'])
-        self.format: StickerFormatType = try_enum(StickerFormatType, data['format_type'])
+        # Fluxer does not expose the format type property on the stickers,
+        # even though it's available internally
+        self.format: StickerFormatType = try_enum(
+            StickerFormatType,
+            data.get(
+                'format_type',
+                (data.get('animated') and StickerFormatType.gif or StickerFormatType.png).value,
+            ),
+        )
         if self.format is StickerFormatType.gif:
             self.url: str = f'https://media.discordapp.net/stickers/{self.id}.gif'
         else:
-            self.url: str = f'{Asset.BASE}/stickers/{self.id}.{self.format.file_extension}'
+            self.url: str = f'{Asset.BASE}/stickers/{self.id}.webp'
 
     def __repr__(self) -> str:
         return f'<StickerItem id={self.id} name={self.name!r} format={self.format}>'
@@ -275,11 +283,19 @@ class Sticker(_StickerTag):
         self.id: int = int(data['id'])
         self.name: str = data['name']
         self.description: str = data['description']
-        self.format: StickerFormatType = try_enum(StickerFormatType, data['format_type'])
+        # Fluxer does not expose the format type property on the stickers,
+        # even though it's available internally
+        self.format: StickerFormatType = try_enum(
+            StickerFormatType,
+            data.get(
+                'format_type',
+                (data.get('animated') and StickerFormatType.gif or StickerFormatType.png).value,
+            ),
+        )
         if self.format is StickerFormatType.gif:
             self.url: str = f'https://media.discordapp.net/stickers/{self.id}.gif'
         else:
-            self.url: str = f'{Asset.BASE}/stickers/{self.id}.{self.format.file_extension}'
+            self.url: str = f'{Asset.BASE}/stickers/{self.id}.webp'
 
     def __repr__(self) -> str:
         return f'<Sticker id={self.id} name={self.name!r}>'

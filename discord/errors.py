@@ -82,20 +82,11 @@ class GatewayNotFound(DiscordException):
         super().__init__(message)
 
 
-def _flatten_error_dict(d: Dict[str, Any], key: str = '') -> Dict[str, str]:
+def _flatten_error_dict(d: List[Dict[str, Any]], key: str = '') -> Dict[str, str]:
     items: List[Tuple[str, str]] = []
-    for k, v in d.items():
-        new_key = key + '.' + k if key else k
-
-        if isinstance(v, dict):
-            try:
-                _errors: List[Dict[str, Any]] = v['_errors']
-            except KeyError:
-                items.extend(_flatten_error_dict(v, new_key).items())
-            else:
-                items.append((new_key, ' '.join(x.get('message', '') for x in _errors)))
-        else:
-            items.append((new_key, v))
+    # Fluxer's error list structure is based on a flat list, not a dict
+    for v in d:
+        items.append((v.pop('path'), v['message']))
 
     return dict(items)
 
@@ -121,13 +112,13 @@ class HTTPException(DiscordException):
     def __init__(self, response: _ResponseType, message: Optional[Union[str, Dict[str, Any]]]):
         self.response: _ResponseType = response
         self.status: int = response.status  # type: ignore # This attribute is filled by the library even if using requests
-        self.code: int
+        self.code: str
         self.text: str
         if isinstance(message, dict):
-            self.code = message.get('code', 0)
+            self.code = message.get('code', '')
             base = message.get('message', '')
             errors = message.get('errors')
-            self._errors: Optional[Dict[str, Any]] = errors
+            self._errors: Optional[Dict[str, Any]] = None
             if errors:
                 errors = _flatten_error_dict(errors)
                 helpful = '\n'.join('In %s: %s' % t for t in errors.items())
@@ -136,7 +127,7 @@ class HTTPException(DiscordException):
                 self.text = base
         else:
             self.text = message or ''
-            self.code = 0
+            self.code = ''
 
         fmt = '{0.status} {0.reason} (error code: {1})'
         if len(self.text):

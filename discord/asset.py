@@ -207,7 +207,7 @@ class Asset(AssetMixin):
         '_key',
     )
 
-    BASE = 'https://cdn.discordapp.com'
+    BASE = 'https://fluxerusercontent.com'
 
     def __init__(self, state: _State, *, url: str, key: str, animated: bool = False) -> None:
         self._state: _State = state

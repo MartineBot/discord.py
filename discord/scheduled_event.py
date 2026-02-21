@@ -184,7 +184,7 @@ class ScheduledEvent(Hashable):
     @property
     def url(self) -> str:
         """:class:`str`: The url for the scheduled event."""
-        return f'https://discord.com/events/{self.guild_id}/{self.id}'
+        return f'https://fluxer.app/events/{self.guild_id}/{self.id}'
 
     async def __modify_status(self, status: EventStatus, reason: Optional[str], /) -> ScheduledEvent:
         payload = {'status': status.value}

@@ -359,7 +359,7 @@ class PartialMessageConverter(Converter[discord.PartialMessage]):
     def _get_id_matches(ctx: Context[BotT], argument: str) -> Tuple[Optional[int], int, int]:
         id_regex = re.compile(r'(?:(?P<channel_id>[0-9]{15,20})-)?(?P<message_id>[0-9]{15,20})$')
         link_regex = re.compile(
-            r'https?://(?:(ptb|canary|www)\.)?discord(?:app)?\.com/channels/'
+            r'https?://(?:(?:web\.)?(?:canary\.)?fluxer\.app|(?:www\.)?fluxerapp\.com)/channels/'
             r'(?P<guild_id>[0-9]{15,20}|@me)'
             r'/(?P<channel_id>[0-9]{15,20})/(?P<message_id>[0-9]{15,20})/?$'
         )
@@ -458,7 +458,7 @@ class GuildChannelConverter(IDConverter[discord.abc.GuildChannel]):
     @staticmethod
     def _parse_from_url(argument: str) -> Optional[re.Match[str]]:
         link_regex = re.compile(
-            r'https?://(?:(?:ptb|canary|www)\.)?discord(?:app)?\.com/channels/'
+            r'https?://(?:(?:web\.)?(?:canary\.)?fluxer\.app|(?:www\.)?fluxerapp\.com)/channels/'
             r'(?:[0-9]{15,20}|@me)'
             r'/([0-9]{15,20})(?:/(?:[0-9]{15,20})/?)?$'
         )
@@ -925,7 +925,7 @@ class ScheduledEventConverter(IDConverter[discord.ScheduledEvent]):
                         break
         else:
             pattern = (
-                r'https?://(?:(ptb|canary|www)\.)?discord\.com/events/'
+                r'https?://(?:(?:web\.)?(?:canary\.)?fluxer\.app|(?:www\.)?fluxerapp\.com)/events/'
                 r'(?P<guild_id>[0-9]{15,20})/'
                 r'(?P<event_id>[0-9]{15,20})$'
             )

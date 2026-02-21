@@ -245,7 +245,8 @@ class RawReactionActionEvent(_RawReprMixin):
         self.message_author_id: Optional[int] = _get_as_snowflake(data, 'message_author_id')
         self.burst: bool = data.get('burst', False)
         self.burst_colours: List[Colour] = [Colour.from_str(c) for c in data.get('burst_colours', [])]
-        self.type: ReactionType = try_enum(ReactionType, data['type'])
+        # Fluxer does not support super reactions
+        self.type: ReactionType = try_enum(ReactionType, data.get('type', 0))
 
         try:
             self.guild_id: Optional[int] = int(data['guild_id'])  # pyright: ignore[reportTypedDictNotRequiredAccess]
@@ -471,7 +472,8 @@ class RawTypingEvent(_RawReprMixin):
         self.channel_id: int = int(data['channel_id'])
         self.user_id: int = int(data['user_id'])
         self.user: Optional[Union[User, Member]] = None
-        self.timestamp: datetime.datetime = datetime.datetime.fromtimestamp(data['timestamp'], tz=datetime.timezone.utc)
+        # Fluxer uses 1 millisecond precision for the timestamp instead of 1 second
+        self.timestamp: datetime.datetime = datetime.datetime.fromtimestamp(data['timestamp'] / 1000.0, tz=datetime.timezone.utc)
         self.guild_id: Optional[int] = _get_as_snowflake(data, 'guild_id')
 
 
@@ -482,16 +484,19 @@ class RawMemberRemoveEvent(_RawReprMixin):
 
     Attributes
     ----------
+    user_id: :class:`int`
+        The ID of the user that left the guild.
     user: Union[:class:`discord.User`, :class:`discord.Member`]
         The user that left the guild.
     guild_id: :class:`int`
         The ID of the guild the user left.
     """
 
-    __slots__ = ('user', 'guild_id')
+    __slots__ = ('user_id', 'user', 'guild_id')
 
-    def __init__(self, data: GuildMemberRemoveEvent, user: User, /) -> None:
-        self.user: Union[User, Member] = user
+    def __init__(self, data: GuildMemberRemoveEvent, user: Optional[User], /) -> None:
+        self.user_id: int = int(data['user']['id'])
+        self.user: Optional[Union[User, Member]] = user
         self.guild_id: int = int(data['guild_id'])
 
 

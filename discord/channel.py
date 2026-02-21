@@ -3283,7 +3283,7 @@ class DMChannel(discord.abc.Messageable, discord.abc.PrivateChannel, Hashable):
 
         .. versionadded:: 2.0
         """
-        return f'https://discord.com/channels/@me/{self.id}'
+        return f'https://fluxer.app/channels/@me/{self.id}'
 
     @property
     def created_at(self) -> datetime.datetime:
@@ -3462,7 +3462,7 @@ class GroupChannel(discord.abc.Messageable, discord.abc.PrivateChannel, Hashable
 
         .. versionadded:: 2.0
         """
-        return f'https://discord.com/channels/@me/{self.id}'
+        return f'https://fluxer.app/channels/@me/{self.id}'
 
     def permissions_for(self, obj: Snowflake, /) -> Permissions:
         """Handles permission resolution for a :class:`User`.
@@ -3580,8 +3580,8 @@ class PartialMessageable(discord.abc.Messageable, Hashable):
     def jump_url(self) -> str:
         """:class:`str`: Returns a URL that allows the client to jump to the channel."""
         if self.guild_id is None:
-            return f'https://discord.com/channels/@me/{self.id}'
-        return f'https://discord.com/channels/{self.guild_id}/{self.id}'
+            return f'https://fluxer.app/channels/@me/{self.id}'
+        return f'https://fluxer.app/channels/{self.guild_id}/{self.id}'
 
     @property
     def created_at(self) -> datetime.datetime:

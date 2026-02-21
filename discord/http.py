@@ -290,8 +290,8 @@ def handle_message_parameters(
     return MultipartParameters(payload=payload, multipart=multipart, files=files)
 
 
-INTERNAL_API_BASE: str = "https://discord.com/api"
-INTERNAL_API_VERSION: int = 10
+INTERNAL_API_BASE: str = "https://api.fluxer.app"
+INTERNAL_API_VERSION: int = 1
 
 
 def _set_api_version(value: int):
@@ -300,8 +300,8 @@ def _set_api_version(value: int):
     if not isinstance(value, int):
         raise TypeError(f'expected int not {value.__class__.__name__}')
 
-    if value not in (9, 10):
-        raise ValueError(f'expected either 9 or 10 not {value}')
+    if value not in (1,):
+        raise ValueError(f'expected 1 not {value}')
 
     INTERNAL_API_VERSION = value
     Route.BASE = f'{INTERNAL_API_BASE}/v{value}'
@@ -315,7 +315,7 @@ def _set_api_base(value: str):
 
 
 class Route:
-    BASE: ClassVar[str] = 'https://discord.com/api/v10'
+    BASE: ClassVar[str] = 'https://api.fluxer.app/v1'
 
     def __init__(self, method: str, path: str, *, metadata: Optional[str] = None, **parameters: Any) -> None:
         self.path: str = path
@@ -551,7 +551,7 @@ class HTTPClient:
         self.use_clock: bool = not unsync_clock
         self.max_ratelimit_timeout: Optional[float] = max(30.0, max_ratelimit_timeout) if max_ratelimit_timeout else None
 
-        user_agent = 'DiscordBot (https://github.com/Rapptz/discord.py {0}) Python/{1[0]}.{1[1]} aiohttp/{2}'
+        user_agent = 'DiscordBot (https://github.com/Red-Fluxer-Patches/discord.py {0}) Python/{1[0]}.{1[1]} aiohttp/{2}'
         self.user_agent: str = user_agent.format(__version__, sys.version_info, aiohttp.__version__)
 
         if not INTERNAL_API_BASE.startswith("https://discord.com/api"):
@@ -1028,7 +1028,8 @@ class HTTPClient:
     ) -> Response[None]:
         r = Route('POST', '/channels/{channel_id}/messages/bulk-delete', channel_id=channel_id)
         payload = {
-            'messages': message_ids,
+            # Fluxer uses 'message_ids' instead of 'messages'
+            'message_ids': message_ids,
         }
 
         return self.request(r, json=payload, reason=reason)
@@ -2777,7 +2778,10 @@ class HTTPClient:
     # Application
 
     def application_info(self) -> Response[appinfo.AppInfo]:
-        return self.request(Route('GET', '/oauth2/applications/@me'))
+        # /oauth2/applications/@me seems to be the same endpoint
+        # but Fluxer only has the one below
+        # The endpoint does not contain the app owner.
+        return self.request(Route('GET', '/applications/@me'))
 
     def edit_application_info(self, *, reason: Optional[str], payload: Any) -> Response[appinfo.AppInfo]:
         valid_keys = (

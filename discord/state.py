@@ -409,6 +409,8 @@ class ConnectionState(Generic[ClientT]):
 
     def store_sticker(self, guild: Guild, data: GuildStickerPayload) -> GuildSticker:
         sticker_id = int(data['id'])
+        if 'guild_id' not in data:
+            data['guild_id'] = guild.id
         self._stickers[sticker_id] = sticker = GuildSticker(state=self, data=data)
         return sticker
 
@@ -527,13 +529,14 @@ class ConnectionState(Generic[ClientT]):
         return utils.find(lambda m: m.id == msg_id, reversed(self._messages)) if self._messages else None
 
     def _add_guild_from_data(self, data: GuildPayload) -> Guild:
+        data.update(data.pop("properties"))
         guild = Guild(data=data, state=self)
         self._add_guild(guild)
         return guild
 
     def _guild_needs_chunking(self, guild: Guild) -> bool:
-        # If presences are enabled then we get back the old guild.large behaviour
-        return self._chunk_guilds and not guild.chunked and not (self._intents.presences and not guild.large)
+        # Fluxer needs chunking for small guilds
+        return self._chunk_guilds and not guild.chunked
 
     def _get_guild_channel(
         self, data: PartialMessagePayload, guild_id: Optional[int] = None
@@ -1119,15 +1122,17 @@ class ConnectionState(Generic[ClientT]):
         self.dispatch('member_join', member)
 
     def parse_guild_member_remove(self, data: gw.GuildMemberRemoveEvent) -> None:
-        user = self.store_user(data['user'])
-        raw = RawMemberRemoveEvent(data, user)
+        # the user object in this event on Fluxer only contains
+        raw_user = data['user']
+        # user = self.store_user(raw_user)
+        raw = RawMemberRemoveEvent(data, None)
 
         guild = self._get_guild(raw.guild_id)
         if guild is not None:
             if guild._member_count is not None:
                 guild._member_count -= 1
 
-            member = guild.get_member(user.id)
+            member = guild.get_member(raw.user_id)
             if member is not None:
                 raw.user = member
                 guild._remove_member(member)
@@ -1949,7 +1954,11 @@ class AutoShardedConnectionState(ConnectionState[ClientT]):
         if self._ready_task is not None:
             self._ready_task.cancel()
 
-        shard_id = data['shard'][0]  # shard_id, num_shards
+        # Fluxer does not support sharding yet so there's no shard data returned.
+        if self.shard_count == 1:
+            shard_id = 0
+        else:
+            shard_id = data['shard'][0]  # shard_id, num_shards
 
         if shard_id in self._ready_tasks:
             self._ready_tasks[shard_id].cancel()

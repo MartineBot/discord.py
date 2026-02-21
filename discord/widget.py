@@ -292,7 +292,7 @@ class Widget:
     @property
     def json_url(self) -> str:
         """:class:`str`: The JSON URL of the widget."""
-        return f'https://discord.com/api/guilds/{self.id}/widget.json'
+        return f'https://web.fluxer.app/api/guilds/{self.id}/widget.json'
 
     @property
     def invite_url(self) -> Optional[str]:

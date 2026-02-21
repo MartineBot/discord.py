@@ -290,7 +290,8 @@ def parse_time(timestamp: Optional[str]) -> Optional[datetime.datetime]: ...
 
 def parse_time(timestamp: Optional[str]) -> Optional[datetime.datetime]:
     if timestamp:
-        return datetime.datetime.fromisoformat(timestamp)
+        # Fluxer returns timestamp with "Z" timezone - unsupported by Python 3.8
+        return datetime.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
     return None
 
 
@@ -369,7 +370,7 @@ def oauth_url(
     :class:`str`
         The OAuth2 URL for inviting the bot into guilds.
     """
-    url = f'https://discord.com/oauth2/authorize?client_id={client_id}'
+    url = f'https://web.fluxer.app/oauth2/authorize?client_id={client_id}'
     if scopes is not None:
         url += '&scope=' + '+'.join(scopes or ('bot', 'applications.commands'))
     if permissions is not MISSING:
@@ -879,7 +880,7 @@ def resolve_invite(invite: Union[Invite, str]) -> ResolvedInvite:
     if isinstance(invite, Invite):
         return ResolvedInvite(invite.code, invite.scheduled_event_id)
     else:
-        rx = r'(?:https?\:\/\/)?discord(?:\.gg|(?:app)?\.com\/invite)\/[^/]+'
+        rx = r'(?:https?\:\/\/)?(?:fluxer\.gg|web\.fluxer\.app\/invite)\/[^/]+'
         m = re.match(rx, invite)
 
         if m:
@@ -917,7 +918,7 @@ def resolve_template(code: Union[Template, str]) -> str:
     if isinstance(code, Template):
         return code.code
     else:
-        rx = r'(?:https?\:\/\/)?discord(?:\.new|(?:app)?\.com\/template)\/(.+)'
+        rx = r'(?:https?\:\/\/)?web\.fluxer\.app\/template\/(.+)'
         m = re.match(rx, code)
         if m:
             return m.group(1)

@@ -726,7 +726,7 @@ class AppCommandChannel(Hashable):
 
         .. versionadded:: 2.6
         """
-        return f'https://discord.com/channels/{self.guild_id}/{self.id}'
+        return f'https://fluxer.app/channels/{self.guild_id}/{self.id}'
 
     @property
     def created_at(self) -> datetime:
@@ -936,7 +936,7 @@ class AppCommandThread(Hashable):
 
         .. versionadded:: 2.6
         """
-        return f'https://discord.com/channels/{self.guild_id}/{self.id}'
+        return f'https://fluxer.app/channels/{self.guild_id}/{self.id}'
 
     @property
     def created_at(self) -> Optional[datetime]:

@@ -104,7 +104,8 @@ class Reaction:
         self.message: Message = message
         self.emoji: Union[PartialEmoji, Emoji, str] = emoji or message._state.get_emoji_from_partial_payload(data['emoji'])
         self.count: int = data.get('count', 1)
-        self.me: bool = data['me']
+        # 'me' is only sent when it's true
+        self.me: bool = data.get('me', False)
         details = data.get('count_details', {})
         self.normal_count: int = details.get('normal', 0)
         self.burst_count: int = details.get('burst', 0)

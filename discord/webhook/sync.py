@@ -617,7 +617,7 @@ class SyncWebhook(BaseWebhook):
     @property
     def url(self) -> str:
         """:class:`str` : Returns the webhook's url."""
-        return f'https://discord.com/api/webhooks/{self.id}/{self.token}'
+        return f'https://api.fluxer.app/webhooks/{self.id}/{self.token}'
 
     @classmethod
     def partial(cls, id: int, token: str, *, session: Session = MISSING, bot_token: Optional[str] = None) -> SyncWebhook:
@@ -686,7 +686,7 @@ class SyncWebhook(BaseWebhook):
             A partial :class:`SyncWebhook`.
             A partial :class:`SyncWebhook` is just a :class:`SyncWebhook` object with an ID and a token.
         """
-        m = re.search(r'discord(?:app)?\.com/api/webhooks/(?P<id>[0-9]{17,20})/(?P<token>[A-Za-z0-9\.\-\_]{60,})', url)
+        m = re.search(r'api\.fluxer\.app/webhooks/(?P<id>[0-9]{17,20})/(?P<token>[A-Za-z0-9\.\-\_]{60,})', url)
         if m is None:
             raise ValueError('Invalid webhook URL given.')
 

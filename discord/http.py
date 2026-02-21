@@ -554,7 +554,7 @@ class HTTPClient:
         user_agent = 'DiscordBot (https://github.com/Red-Fluxer-Patches/discord.py {0}) Python/{1[0]}.{1[1]} aiohttp/{2}'
         self.user_agent: str = user_agent.format(__version__, sys.version_info, aiohttp.__version__)
 
-        if not INTERNAL_API_BASE.startswith("https://discord.com/api"):
+        if not INTERNAL_API_BASE.startswith("https://api.fluxer.app"):
             self.request = self.request_without_ratelimiter
 
     def clear(self) -> None:

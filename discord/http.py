@@ -551,7 +551,7 @@ class HTTPClient:
         self.use_clock: bool = not unsync_clock
         self.max_ratelimit_timeout: Optional[float] = max(30.0, max_ratelimit_timeout) if max_ratelimit_timeout else None
 
-        user_agent = 'DiscordBot (https://github.com/Red-Fluxer-Patches/discord.py {0}) Python/{1[0]}.{1[1]} aiohttp/{2}'
+        user_agent = 'DiscordBot (https://github.com/MartineBot/discord.py {0}) Python/{1[0]}.{1[1]} aiohttp/{2}'
         self.user_agent: str = user_agent.format(__version__, sys.version_info, aiohttp.__version__)
 
         if not INTERNAL_API_BASE.startswith("https://api.fluxer.app"):

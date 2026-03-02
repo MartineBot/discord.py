@@ -81,6 +81,7 @@ from .audit_logs import AuditLogEntry
 from ._types import ClientT
 from .soundboard import SoundboardSound
 from .subscription import Subscription
+from .permissions import Permissions
 
 
 if TYPE_CHECKING:
@@ -176,6 +177,8 @@ class ConnectionState(Generic[ClientT]):
         _get_websocket: Callable[..., DiscordWebSocket]
         _get_client: Callable[..., ClientT]
         _parsers: Dict[str, Callable[[Dict[str, Any]], None]]
+
+    _REQUEST_MEMBERS_PERMS = Permissions(manage_roles=True, ban_members=True, kick_members=True)
 
     def __init__(
         self,
@@ -535,8 +538,11 @@ class ConnectionState(Generic[ClientT]):
         return guild
 
     def _guild_needs_chunking(self, guild: Guild) -> bool:
-        # Fluxer needs chunking for small guilds
-        return self._chunk_guilds and not guild.chunked
+        # 1. Fluxer needs chunking for small guilds
+        # 2. For chunking to be possible, the bot needs to have Manage Roles, Kick Members, and Ban Members perms.
+        #    Ref:
+        #    https://github.com/fluxerapp/fluxer/blob/c2b69be17d1877c5bb82d10c77fa67cbe4e882d7/fluxer_gateway/src/guild/guild_request_members.erl#L163-L178
+        return self._chunk_guilds and not guild.chunked and guild.me.guild_permissions >= self._REQUEST_MEMBERS_PERMS
 
     def _get_guild_channel(
         self, data: PartialMessagePayload, guild_id: Optional[int] = None
@@ -859,6 +865,16 @@ class ConnectionState(Generic[ClientT]):
             self.dispatch('user_update', user_update[0], user_update[1])
 
         self.dispatch('presence_update', old_member, member)
+
+    def parse_sessions_replace(self, data: gw.SessionsReplaceEvent) -> None:
+        for session in data:
+            if session['session_id'] == 'all':
+                for guild in self._guilds.values():
+                    member = guild.me
+                    old_member = Member._copy(member)
+                    member._session_update(session)
+                    self.dispatch('presence_update', old_member, member)
+                break
 
     def parse_user_update(self, data: gw.UserUpdateEvent) -> None:
         if self.user:

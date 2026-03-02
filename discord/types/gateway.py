@@ -26,7 +26,7 @@ from typing import List, Literal, Optional, TypedDict
 from typing_extensions import NotRequired, Required
 
 from .automod import AutoModerationAction, AutoModerationRuleTriggerType
-from .activity import PartialPresenceUpdate
+from .activity import PartialPresenceUpdate, SessionUpdate
 from .sku import Entitlement
 from .voice import GuildVoiceState
 from .integration import BaseIntegration, IntegrationApplication
@@ -135,6 +135,9 @@ InteractionCreateEvent = Interaction
 
 
 PresenceUpdateEvent = PartialPresenceUpdate
+
+
+SessionsReplaceEvent = List[SessionUpdate]
 
 
 UserUpdateEvent = User

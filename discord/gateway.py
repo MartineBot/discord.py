@@ -210,6 +210,10 @@ class KeepAliveHandler(threading.Thread):
     def tick(self) -> None:
         self._last_recv = time.perf_counter()
 
+    def beat(self) -> Dict[str, Any]:
+        self._last_send = time.perf_counter()
+        return self.get_payload()
+
     def ack(self) -> None:
         ack_time = time.perf_counter()
         self._last_ack = ack_time
@@ -289,6 +293,8 @@ class DiscordWebSocket:
         a connection issue.
     GUILD_SYNC
         Send only. Requests a guild sync.
+    LAZY_REQUEST
+        Send only. Requests lazy-loaded guild data, i.e. subscribes to relevant events.
     gateway
         The gateway we are currently connected to.
     token
@@ -321,6 +327,7 @@ class DiscordWebSocket:
     HELLO                       = 10
     HEARTBEAT_ACK               = 11
     GUILD_SYNC                  = 12
+    LAZY_REQUEST                = 14
     # fmt: on
 
     def __init__(self, socket: aiohttp.ClientWebSocketResponse, *, loop: asyncio.AbstractEventLoop) -> None:
@@ -541,7 +548,7 @@ class DiscordWebSocket:
 
             if op == self.HEARTBEAT:
                 if self._keep_alive:
-                    beat = self._keep_alive.get_payload()
+                    beat = self._keep_alive.beat()
                     await self.send_as_json(beat)
                 return
 
@@ -653,14 +660,20 @@ class DiscordWebSocket:
                 self._keep_alive.stop()
                 self._keep_alive = None
 
+            # While Discord will simply send INVALIDATE_SESSION when session_id is None,
+            # Fluxer will instead close the connection with 4002 meaning we can end up
+            # reconnecting in a loop forever. Let's just make sure we actually have
+            # what it takes to resume.
+            resume = self.session_id is not None
+            await self.socket.close(code=4000)
             if isinstance(e, asyncio.TimeoutError):
                 _log.debug('Timed out receiving packet. Attempting a reconnect.')
-                raise ReconnectWebSocket(self.shard_id) from None
+                raise ReconnectWebSocket(self.shard_id, resume=resume) from None
 
             code = self._close_code or self.socket.close_code
             if self._can_handle_close():
                 _log.debug('Websocket closed with %s, attempting a reconnect.', code)
-                raise ReconnectWebSocket(self.shard_id) from None
+                raise ReconnectWebSocket(self.shard_id, resume=resume) from None
             else:
                 _log.debug('Websocket closed with %s, cannot reconnect.', code)
                 raise ConnectionClosed(self.socket, shard_id=self.shard_id, code=code) from None
@@ -747,6 +760,39 @@ class DiscordWebSocket:
 
         if query is not None:
             payload['d']['query'] = query
+
+        await self.send_as_json(payload)
+
+    async def update_lazy_subscriptions(
+        self,
+        guild_id: int,
+        *,
+        active: Optional[bool] = None,
+        sync: Optional[bool] = None,
+        typing: Optional[bool] = None,
+        member_list_channel_ids: List[int] = None,
+        member_ids: Optional[List[int]] = None,
+    ) -> None:
+        subscription: Any = {}
+        if active is not None:
+            subscription['active'] = active
+        if sync is not None:
+            subscription['sync'] = sync
+        if typing is not None:
+            subscription['typing'] = typing
+        if member_ids is not None:
+            subscription['members'] = member_ids
+        if member_list_channel_ids is not None:
+            subscription['member_list_channels'] = member_list_channel_ids
+
+        payload = {
+            'op': self.LAZY_REQUEST,
+            'd': {
+                'subscriptions': {
+                    str(guild_id): subscription,
+                },
+            },
+        }
 
         await self.send_as_json(payload)
 

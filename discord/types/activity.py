@@ -34,18 +34,29 @@ StatusType = Literal['idle', 'dnd', 'online', 'offline']
 StatusDisplayType = Literal[0, 1, 2]
 
 
-class PartialPresenceUpdate(TypedDict):
+class PartialSessionUpdate(TypedDict):
+    status: StatusType
+    mobile: bool
+    afk: bool
+
+
+class SessionUpdate(PartialSessionUpdate):
+    session_id: str
+
+
+class PartialPresenceUpdate(PartialSessionUpdate):
     user: User
     guild_id: Snowflake
-    status: StatusType
-    activities: List[Activity]
-    client_status: ClientStatus
+    custom_status: Optional[CustomStatus]
+    activities: NotRequired[List[Activity]]
 
 
-class ClientStatus(TypedDict, total=False):
-    desktop: StatusType
-    mobile: StatusType
-    web: StatusType
+class CustomStatus(TypedDict):
+    emoji_name: Optional[str]
+    emoji_animated: bool
+    emoji_id: NotRequired[str]
+    expires_at: str
+    text: str
 
 
 class ActivityTimestamps(TypedDict, total=False):

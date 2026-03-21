@@ -983,8 +983,10 @@ class ViewStore:
         if dispatch_info and snapshot:
             for key in snapshot.items:
                 dispatch_info.pop(key, None)
-            for key in snapshot.dynamic_items:
-                self._dynamic_items.pop(key, None)
+
+            if view._clear_dynamic_items:
+                for key in snapshot.dynamic_items:
+                    self._dynamic_items.pop(key, None)
 
         if dispatch_info is not None and len(dispatch_info) == 0:
             self._views.pop(view._cache_key, None)
